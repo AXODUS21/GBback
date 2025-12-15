@@ -7,12 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { LogOut, School, DollarSign, Globe, CheckCircle, XCircle } from "lucide-react"
-import Navigation from "@/components/navigation"
-import HeroSection from "@/components/hero-section"
-import ImpactSection from "@/components/impact-section"
-import ProgramFeature from "@/components/program-feature"
-import VoucherSystem from "@/components/voucher-system"
-import Footer from "@/components/footer"
+// import Navigation from "@/components/navigation"
+// import HeroSection from "@/components/hero-section"
+// import ImpactSection from "@/components/impact-section"
+// import ProgramFeature from "@/components/program-feature"
+// import VoucherSystem from "@/components/voucher-system"
+// import Footer from "@/components/footer"
 
 type Application = {
   id: string
@@ -156,12 +156,12 @@ export default function AdminDashboard() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <Navigation />
+        {/* <Navigation />
         <HeroSection />
         <ImpactSection />
         <ProgramFeature />
         <VoucherSystem />
-        <Footer />
+        <Footer /> */}
 
         {/* Stats Overview */}
         <div className="grid gap-4 md:grid-cols-4 mb-8">
