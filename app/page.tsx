@@ -2,43 +2,57 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { LogOut, School, DollarSign, Globe, CheckCircle, XCircle } from "lucide-react"
-// import Navigation from "@/components/navigation"
-// import HeroSection from "@/components/hero-section"
-// import ImpactSection from "@/components/impact-section"
-// import ProgramFeature from "@/components/program-feature"
-// import VoucherSystem from "@/components/voucher-system"
-// import Footer from "@/components/footer"
+import { School, DollarSign, Globe, CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
+import Sidebar from "@/components/Sidebar"
+import Header from "@/components/Header"
 
 type Application = {
   id: string
-  schoolName: string
-  district: string
-  contactName: string
+  student_name: string
   email: string
-  phone: string
-  voucherAmount: number
-  studentCount: number
-  programType: string
-  status: "pending" | "approved" | "rejected"
-  appliedDate: string
+  phone: string | null
+  school_name: string
+  district: string | null
+  grade_level: string | null
+  program_type: string
+  financial_need_description: string | null
+  academic_goals: string | null
+  student_count: number
+  voucher_amount: number | null
   country: string
+  status: "pending" | "approved" | "rejected"
+  applied_date: string
+  reviewed_at: string | null
+  notes: string | null
+}
+
+type Donation = {
+  id: string
+  donor_name: string
+  donor_email: string
+  amount: number
+  donation_type: string
+  payment_status: string
+  created_at: string
 }
 
 export default function AdminDashboard() {
   const router = useRouter()
   const [applications, setApplications] = useState<Application[]>([])
+  const [donations, setDonations] = useState<Donation[]>([])
   const [stats, setStats] = useState({
     totalApplications: 0,
     pending: 0,
     approved: 0,
     totalVouchersIssued: 0,
+    totalDonations: 0,
+    totalDonationAmount: 0,
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [isUpdating, setIsUpdating] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "rejected">("pending")
 
   useEffect(() => {
     const isAuth = localStorage.getItem("adminAuth")
@@ -47,86 +61,108 @@ export default function AdminDashboard() {
       return
     }
 
-    setIsLoading(false)
-
-    // Load applications from localStorage
-    const savedApplications = localStorage.getItem("schoolApplications")
-    if (savedApplications) {
-      const apps = JSON.parse(savedApplications)
-      setApplications(apps)
-      calculateStats(apps)
-    } else {
-      // Initialize with demo data
-      const demoApplications: Application[] = [
-        {
-          id: "1",
-          schoolName: "Lincoln Elementary School",
-          district: "Springfield School District",
-          contactName: "Sarah Johnson",
-          email: "sjohnson@lincoln.edu",
-          phone: "555-0123",
-          voucherAmount: 500,
-          studentCount: 5,
-          programType: "STEM Tutoring",
-          status: "pending",
-          appliedDate: "2025-01-10",
-          country: "USA",
-        },
-        {
-          id: "2",
-          schoolName: "Roosevelt High School",
-          district: "Metro School District",
-          contactName: "Michael Chen",
-          email: "mchen@roosevelt.edu",
-          phone: "555-0456",
-          voucherAmount: 1000,
-          studentCount: 10,
-          programType: "SEL & Mentorship",
-          status: "pending",
-          appliedDate: "2025-01-12",
-          country: "USA",
-        },
-        {
-          id: "3",
-          schoolName: "Greenwood Charter School",
-          district: "City Charter Network",
-          contactName: "Emily Rodriguez",
-          email: "erodriguez@greenwood.org",
-          phone: "555-0789",
-          voucherAmount: 750,
-          studentCount: 8,
-          programType: "Reading & Math Support",
-          status: "approved",
-          appliedDate: "2025-01-05",
-          country: "USA",
-        },
-      ]
-      setApplications(demoApplications)
-      localStorage.setItem("schoolApplications", JSON.stringify(demoApplications))
-      calculateStats(demoApplications)
-    }
+    loadData()
   }, [router])
 
-  const calculateStats = (apps: Application[]) => {
+  const loadData = async () => {
+    try {
+      setIsLoading(true)
+
+      // Load applications
+      const { data: appsData, error: appsError } = await supabase
+        .from("scholarship_applications")
+        .select("*")
+        .order("applied_date", { ascending: false })
+
+      if (appsError) throw appsError
+
+      // Load donations
+      const { data: donationsData, error: donationsError } = await supabase
+        .from("donations")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (donationsError) throw donationsError
+
+      const formattedApps = (appsData || []).map((app) => ({
+        ...app,
+        applied_date: new Date(app.applied_date).toISOString().split("T")[0],
+      }))
+
+      setApplications(formattedApps as Application[])
+      setDonations((donationsData || []) as Donation[])
+      calculateStats(formattedApps as Application[], donationsData || [])
+    } catch (error: any) {
+      console.error("Error loading data:", error)
+      toast.error("Failed to load data. Please refresh the page.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const calculateStats = (apps: Application[], donations: Donation[]) => {
     setStats({
       totalApplications: apps.length,
       pending: apps.filter((a) => a.status === "pending").length,
       approved: apps.filter((a) => a.status === "approved").length,
-      totalVouchersIssued: apps.filter((a) => a.status === "approved").reduce((sum, a) => sum + a.voucherAmount, 0),
+      totalVouchersIssued: apps
+        .filter((a) => a.status === "approved")
+        .reduce((sum, a) => sum + (a.voucher_amount || 0), 0),
+      totalDonations: donations.length,
+      totalDonationAmount: donations.reduce((sum, d) => sum + d.amount, 0),
     })
   }
 
-  const handleStatusChange = (id: string, newStatus: "approved" | "rejected") => {
-    const updatedApplications = applications.map((app) => (app.id === id ? { ...app, status: newStatus } : app))
-    setApplications(updatedApplications)
-    localStorage.setItem("schoolApplications", JSON.stringify(updatedApplications))
-    calculateStats(updatedApplications)
+  const handleStatusChange = async (id: string, newStatus: "approved" | "rejected") => {
+    setIsUpdating(id)
+    try {
+      const application = applications.find((app) => app.id === id)
+      if (!application) return
+
+      // Update in Supabase
+      const { error: updateError } = await supabase
+        .from("scholarship_applications")
+        .update({
+          status: newStatus,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+
+      if (updateError) throw updateError
+
+      // Send email notification
+      try {
+        const response = await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: application.email,
+            studentName: application.student_name,
+            status: newStatus,
+            schoolName: application.school_name,
+            programType: application.program_type,
+          }),
+        })
+
+        if (!response.ok) {
+          console.error("Failed to send email notification")
+        }
+      } catch (emailError) {
+        console.error("Email error:", emailError)
+        // Don't fail the whole operation if email fails
+      }
+
+      // Reload data
+      await loadData()
+      toast.success(`Application ${newStatus} successfully!`)
+    } catch (error: any) {
+      console.error("Error updating application:", error)
+      toast.error(error.message || "Failed to update application. Please try again.")
+    } finally {
+      setIsUpdating(null)
+    }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem("adminAuth")
-    router.push("/auth")
-  }
 
   const pendingApplications = applications.filter((a) => a.status === "pending")
   const approvedApplications = applications.filter((a) => a.status === "approved")
@@ -134,122 +170,165 @@ export default function AdminDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Global Bright Futures Foundation</p>
+    <div className="min-h-screen bg-gray-50">
+      <Sidebar />
+      <div className="lg:pl-64">
+        <Header userName="Admin User" role="admin" />
+        <main className="p-6">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              Dashboard
+            </h1>
+            <p className="text-gray-600">
+              Overview of scholarship applications and donations
+            </p>
           </div>
-          <Button variant="outline" onClick={handleLogout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
-        </div>
-      </header>
+          {/* Stats Overview */}
+          <div className="grid gap-4 md:grid-cols-4 mb-8">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-600">Total Applications</h3>
+                <School className="h-4 w-4 text-gray-400" />
+              </div>
+              <div className="text-2xl font-bold text-gray-900">{stats.totalApplications}</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-600">Pending Review</h3>
+                <Globe className="h-4 w-4 text-gray-400" />
+              </div>
+              <div className="text-2xl font-bold text-gray-900">{stats.pending}</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-600">Approved</h3>
+                <CheckCircle className="h-4 w-4 text-gray-400" />
+              </div>
+              <div className="text-2xl font-bold text-gray-900">{stats.approved}</div>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-gray-600">Total Vouchers Issued</h3>
+                <DollarSign className="h-4 w-4 text-gray-400" />
+              </div>
+              <div className="text-2xl font-bold text-gray-900">${stats.totalVouchersIssued.toLocaleString()}</div>
+            </div>
+          </div>
 
-      <main className="container mx-auto px-4 py-8">
-        {/* <Navigation />
-        <HeroSection />
-        <ImpactSection />
-        <ProgramFeature />
-        <VoucherSystem />
-        <Footer /> */}
+          {/* Donations Stats */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Donations Overview</h2>
+            <p className="text-sm text-gray-600 mb-4">Total donations received</p>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600">Total Donations</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalDonations}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Total Amount</p>
+                <p className="text-2xl font-bold text-gray-900">${stats.totalDonationAmount.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
 
-        {/* Stats Overview */}
-        <div className="grid gap-4 md:grid-cols-4 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Applications</CardTitle>
-              <School className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalApplications}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
-              <Globe className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.pending}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Approved</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.approved}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Vouchers Issued</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${stats.totalVouchersIssued.toLocaleString()}</div>
-            </CardContent>
-          </Card>
-        </div>
+          {/* Applications Tabs */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Scholarship Applications</h2>
+          <p className="text-sm text-gray-600 mb-6">Review and manage scholarship applications</p>
+          <div className="w-full">
+            <div className="flex border-b border-gray-200 mb-6">
+                <button
+                  onClick={() => setActiveTab("pending")}
+                  className={`px-4 py-2 font-medium text-sm ${
+                    activeTab === "pending"
+                      ? "border-b-2 border-indigo-500 text-indigo-600"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Pending ({pendingApplications.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("approved")}
+                  className={`px-4 py-2 font-medium text-sm ${
+                    activeTab === "approved"
+                      ? "border-b-2 border-indigo-500 text-indigo-600"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Approved ({approvedApplications.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("rejected")}
+                  className={`px-4 py-2 font-medium text-sm ${
+                    activeTab === "rejected"
+                      ? "border-b-2 border-indigo-500 text-indigo-600"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Rejected ({rejectedApplications.length})
+                </button>
+              </div>
 
-        {/* Applications Tabs */}
-        <Card>
-          <CardHeader>
-            <CardTitle>School Applications</CardTitle>
-            <CardDescription>Review and manage school voucher applications</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="pending" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="pending">Pending ({pendingApplications.length})</TabsTrigger>
-                <TabsTrigger value="approved">Approved ({approvedApplications.length})</TabsTrigger>
-                <TabsTrigger value="rejected">Rejected ({rejectedApplications.length})</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="pending" className="space-y-4 mt-4">
-                {pendingApplications.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No pending applications</p>
-                ) : (
-                  pendingApplications.map((app) => (
-                    <ApplicationCard key={app.id} application={app} onStatusChange={handleStatusChange} />
-                  ))
+              <div className="space-y-4">
+                {activeTab === "pending" && (
+                  pendingApplications.length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">No pending applications</p>
+                  ) : (
+                    pendingApplications.map((app) => (
+                      <ApplicationCard
+                        key={app.id}
+                        application={app}
+                        onStatusChange={handleStatusChange}
+                        isUpdating={isUpdating === app.id}
+                      />
+                    ))
+                  )
                 )}
-              </TabsContent>
 
-              <TabsContent value="approved" className="space-y-4 mt-4">
-                {approvedApplications.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No approved applications</p>
-                ) : (
-                  approvedApplications.map((app) => (
-                    <ApplicationCard key={app.id} application={app} onStatusChange={handleStatusChange} />
-                  ))
+                {activeTab === "approved" && (
+                  approvedApplications.length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">No approved applications</p>
+                  ) : (
+                    approvedApplications.map((app) => (
+                      <ApplicationCard
+                        key={app.id}
+                        application={app}
+                        onStatusChange={handleStatusChange}
+                        isUpdating={isUpdating === app.id}
+                      />
+                    ))
+                  )
                 )}
-              </TabsContent>
 
-              <TabsContent value="rejected" className="space-y-4 mt-4">
-                {rejectedApplications.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No rejected applications</p>
-                ) : (
-                  rejectedApplications.map((app) => (
-                    <ApplicationCard key={app.id} application={app} onStatusChange={handleStatusChange} />
-                  ))
+                {activeTab === "rejected" && (
+                  rejectedApplications.length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">No rejected applications</p>
+                  ) : (
+                    rejectedApplications.map((app) => (
+                      <ApplicationCard
+                        key={app.id}
+                        application={app}
+                        onStatusChange={handleStatusChange}
+                        isUpdating={isUpdating === app.id}
+                      />
+                    ))
+                  )
                 )}
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      </main>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
@@ -257,80 +336,128 @@ export default function AdminDashboard() {
 function ApplicationCard({
   application,
   onStatusChange,
+  isUpdating,
 }: {
   application: Application
   onStatusChange: (id: string, status: "approved" | "rejected") => void
+  isUpdating: boolean
 }) {
+  const getStatusBadgeColor = () => {
+    if (application.status === "approved") {
+      return "bg-green-100 text-green-800"
+    } else if (application.status === "rejected") {
+      return "bg-red-100 text-red-800"
+    }
+    return "bg-yellow-100 text-yellow-800"
+  }
+
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between">
-          <div className="space-y-3 flex-1">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="flex items-start justify-between">
+        <div className="space-y-3 flex-1">
+          <div>
+            <h3 className="font-semibold text-lg text-gray-900">{application.student_name}</h3>
+            <p className="text-sm text-gray-600">{application.school_name}</p>
+            {application.district && <p className="text-xs text-gray-500">{application.district}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <h3 className="font-semibold text-lg">{application.schoolName}</h3>
-              <p className="text-sm text-muted-foreground">{application.district}</p>
+              <p className="text-gray-600">Email</p>
+              <p className="font-medium text-gray-900">{application.email}</p>
             </div>
-
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            {application.phone && (
               <div>
-                <p className="text-muted-foreground">Contact Person</p>
-                <p className="font-medium">{application.contactName}</p>
+                <p className="text-gray-600">Phone</p>
+                <p className="font-medium text-gray-900">{application.phone}</p>
               </div>
+            )}
+            <div>
+              <p className="text-gray-600">Applied Date</p>
+              <p className="font-medium text-gray-900">{new Date(application.applied_date).toLocaleDateString()}</p>
+            </div>
+            <div>
+              <p className="text-gray-600">Program Type</p>
+              <p className="font-medium text-gray-900">{application.program_type}</p>
+            </div>
+            {application.grade_level && (
               <div>
-                <p className="text-muted-foreground">Email</p>
-                <p className="font-medium">{application.email}</p>
+                <p className="text-gray-600">Grade Level</p>
+                <p className="font-medium text-gray-900">{application.grade_level}</p>
               </div>
+            )}
+            <div>
+              <p className="text-gray-600">Students</p>
+              <p className="font-medium text-gray-900">{application.student_count} student(s)</p>
+            </div>
+            {application.voucher_amount && (
               <div>
-                <p className="text-muted-foreground">Phone</p>
-                <p className="font-medium">{application.phone}</p>
+                <p className="text-gray-600">Voucher Amount</p>
+                <p className="font-medium text-indigo-600">${application.voucher_amount}</p>
               </div>
-              <div>
-                <p className="text-muted-foreground">Applied Date</p>
-                <p className="font-medium">{new Date(application.appliedDate).toLocaleDateString()}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Program Type</p>
-                <p className="font-medium">{application.programType}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Students</p>
-                <p className="font-medium">{application.studentCount} students</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Voucher Amount</p>
-                <p className="font-medium text-primary">${application.voucherAmount}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Status</p>
-                <Badge
-                  variant={
-                    application.status === "approved"
-                      ? "default"
-                      : application.status === "rejected"
-                        ? "destructive"
-                        : "secondary"
-                  }
-                >
-                  {application.status}
-                </Badge>
-              </div>
+            )}
+            <div>
+              <p className="text-gray-600">Status</p>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeColor()}`}>
+                {application.status}
+              </span>
             </div>
           </div>
+
+          {application.financial_need_description && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Financial Need:</p>
+              <p className="text-sm text-gray-600">{application.financial_need_description}</p>
+            </div>
+          )}
+
+          {application.academic_goals && (
+            <div className="mt-2">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Academic Goals:</p>
+              <p className="text-sm text-gray-600">{application.academic_goals}</p>
+            </div>
+          )}
         </div>
+      </div>
 
-        {application.status === "pending" && (
-          <div className="flex gap-2 mt-4 pt-4 border-t">
-            <Button onClick={() => onStatusChange(application.id, "approved")} className="flex-1">
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Approve Application
-            </Button>
-            <Button onClick={() => onStatusChange(application.id, "rejected")} variant="destructive" className="flex-1">
-              <XCircle className="mr-2 h-4 w-4" />
-              Reject Application
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {application.status === "pending" && (
+        <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
+          <button
+            onClick={() => onStatusChange(application.id, "approved")}
+            disabled={isUpdating}
+            className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-[#e01414] via-[#760da3] to-[#008cff] hover:opacity-90 text-white font-medium py-2 px-4 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isUpdating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="h-4 w-4" />
+                Approve Application
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => onStatusChange(application.id, "rejected")}
+            disabled={isUpdating}
+            className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isUpdating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <XCircle className="h-4 w-4" />
+                Reject Application
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
