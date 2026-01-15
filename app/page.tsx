@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { School, DollarSign, Globe, CheckCircle, XCircle, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
@@ -56,27 +56,31 @@ export default function AdminDashboard() {
   const [isUpdating, setIsUpdating] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"pending" | "approved" | "rejected">("pending")
 
-  useEffect(() => {
-    const isAuth = localStorage.getItem("adminAuth")
-    if (!isAuth) {
-      router.push("/auth")
-      return
-    }
-
-    loadData()
-  }, [router])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setIsLoading(true)
 
+      // Log connection info
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      console.log("🔗 Connecting to Supabase URL:", supabaseUrl)
+      console.log("📊 Loading applications from Supabase...")
+      
       // Load applications
       const { data: appsData, error: appsError } = await supabase
         .from("scholarship_applications")
         .select("*")
         .order("applied_date", { ascending: false })
 
-      if (appsError) throw appsError
+      console.log("📋 Applications query result:", { 
+        count: appsData?.length || 0,
+        appsData,
+        appsError 
+      })
+
+      if (appsError) {
+        console.error("Applications query error:", appsError)
+        throw new Error(`Failed to load applications: ${appsError.message}`)
+      }
 
       // Load donations
       const { data: donationsData, error: donationsError } = await supabase
@@ -84,23 +88,68 @@ export default function AdminDashboard() {
         .select("*")
         .order("created_at", { ascending: false })
 
-      if (donationsError) throw donationsError
+      if (donationsError) {
+        console.error("Donations query error:", donationsError)
+        // Don't throw for donations, just log it
+        console.warn("Failed to load donations, continuing with applications only")
+      }
 
       const formattedApps = (appsData || []).map((app) => ({
         ...app,
-        applied_date: new Date(app.applied_date).toISOString().split("T")[0],
+        applied_date: app.applied_date 
+          ? new Date(app.applied_date).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0],
       }))
+
+      console.log("Formatted applications:", formattedApps)
+      console.log("Setting applications:", formattedApps.length)
 
       setApplications(formattedApps as Application[])
       setDonations((donationsData || []) as Donation[])
       calculateStats(formattedApps as Application[], donationsData || [])
+      
+      console.log("Data loaded successfully. Applications count:", formattedApps.length)
     } catch (error: any) {
       console.error("Error loading data:", error)
-      toast.error("Failed to load data. Please refresh the page.")
+      toast.error(error.message || "Failed to load data. Please check console for details.")
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const isAuth = localStorage.getItem("adminAuth")
+    if (!isAuth) {
+      router.push("/auth")
+      return
+    }
+
+    // Load data on mount
+    loadData()
+    
+    // Set up real-time subscription to listen for new applications
+    const subscription = supabase
+      .channel('scholarship_applications_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'scholarship_applications'
+        },
+        (payload) => {
+          console.log('Database change detected:', payload)
+          // Reload data when changes are detected
+          loadData()
+        }
+      )
+      .subscribe()
+
+    // Cleanup subscription on unmount
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [router, loadData])
 
   const calculateStats = (apps: Application[], donations: Donation[]) => {
     setStats({
@@ -275,8 +324,20 @@ export default function AdminDashboard() {
 
           {/* Applications Tabs */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Scholarship Applications</h2>
-          <p className="text-sm text-gray-600 mb-6">Review and manage scholarship applications</p>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Scholarship Applications</h2>
+              <p className="text-sm text-gray-600">Review and manage scholarship applications</p>
+            </div>
+            <button
+              onClick={loadData}
+              disabled={isLoading}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Loader2 className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
           <div className="w-full">
             <div className="flex border-b border-gray-200 mb-6">
                 <button
@@ -312,9 +373,19 @@ export default function AdminDashboard() {
               </div>
 
               <div className="space-y-4">
+                {/* Debug info - remove in production */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="mb-4 p-4 bg-gray-100 rounded-lg text-xs">
+                    <p><strong>Debug:</strong> Total apps: {applications.length}, Pending: {pendingApplications.length}, Approved: {approvedApplications.length}, Rejected: {rejectedApplications.length}</p>
+                  </div>
+                )}
+                
                 {activeTab === "pending" && (
                   pendingApplications.length === 0 ? (
-                    <p className="text-center text-gray-500 py-8">No pending applications</p>
+                    <div className="text-center py-8">
+                      <p className="text-gray-500 mb-2">No pending applications</p>
+                      <p className="text-xs text-gray-400">Total applications in system: {applications.length}</p>
+                    </div>
                   ) : (
                     pendingApplications.map((app) => (
                       <ApplicationCard
