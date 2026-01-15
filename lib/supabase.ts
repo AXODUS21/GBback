@@ -25,6 +25,12 @@ if (supabaseUrl && supabaseUrl !== expectedUrl) {
   console.log('✅ Connected to correct Supabase project (NGO):', supabaseUrl)
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+})
 
 

@@ -1,24 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, LogOut, Menu, X, Ticket } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu, X, Ticket, School, FileText } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const [userRole, setUserRole] = useState<string | null>(null);
 
-  const handleLogout = () => {
-    localStorage.removeItem("adminAuth");
-    router.push("/auth");
+  useEffect(() => {
+    checkUserRole();
+  }, []);
+
+  const checkUserRole = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      setUserRole(profile?.role || null);
+    }
   };
 
-  const navigationItems = [
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/auth/login");
+  };
+
+  const adminNavigationItems = [
     {
       path: "/",
       label: "Dashboard",
       icon: LayoutDashboard,
+    },
+    {
+      path: "/admin/school-signups",
+      label: "School Signups",
+      icon: School,
     },
     {
       path: "/vouchers",
@@ -26,6 +49,16 @@ export default function Sidebar() {
       icon: Ticket,
     },
   ];
+
+  const schoolNavigationItems = [
+    {
+      path: "/apply",
+      label: "Apply for Scholarship",
+      icon: FileText,
+    },
+  ];
+
+  const navigationItems = userRole === "admin" ? adminNavigationItems : schoolNavigationItems;
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -59,7 +92,7 @@ export default function Sidebar() {
           {/* Logo */}
           <div className="p-6 border-b border-gray-200">
             <h1 className="text-2xl font-bold bg-gradient-to-r from-[#e01414] via-[#760da3] to-[#008cff] bg-clip-text text-transparent">
-              Admin Dashboard
+              {userRole === "admin" ? "Admin Dashboard" : "School Portal"}
             </h1>
             <p className="text-xs text-gray-500 mt-1">Global Bright Futures</p>
           </div>

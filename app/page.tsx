@@ -118,9 +118,24 @@ export default function AdminDashboard() {
   }, [])
 
   useEffect(() => {
-    const isAuth = localStorage.getItem("adminAuth")
-    if (!isAuth) {
-      router.push("/auth")
+    checkAuth()
+  }, [router, loadData])
+
+  const checkAuth = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      router.push("/auth/login")
+      return
+    }
+
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    if (!profile || profile.role !== "admin") {
+      router.push("/auth/login")
       return
     }
 
@@ -149,7 +164,7 @@ export default function AdminDashboard() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [router, loadData])
+  }
 
   const calculateStats = (apps: Application[], donations: Donation[]) => {
     setStats({
