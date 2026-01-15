@@ -1,24 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  X,
-} from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { LayoutDashboard, LogOut, Menu, X, Ticket } from "lucide-react";
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = () => {
     localStorage.removeItem("adminAuth");
     router.push("/auth");
   };
 
-  const isActive = () => true; // Only one page for now
+  const navigationItems = [
+    {
+      path: "/",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+    },
+    {
+      path: "/vouchers",
+      label: "Vouchers",
+      icon: Ticket,
+    },
+  ];
+
+  const isActive = (path: string) => {
+    if (path === "/") {
+      return pathname === "/";
+    }
+    return pathname?.startsWith(path);
+  };
+
+  const handleNavigation = (path: string) => {
+    router.push(path);
+    setIsOpen(false); // Close mobile menu after navigation
+  };
 
   return (
     <>
@@ -47,16 +66,24 @@ export default function Sidebar() {
 
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-2">
-            <div
-              className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                isActive()
-                  ? "bg-gradient-to-r from-[#e01414] via-[#760da3] to-[#008cff] text-white"
-                  : "text-gray-700 hover:bg-gray-100"
-              }`}
-            >
-              <LayoutDashboard className="w-5 h-5" />
-              <span className="font-medium">Dashboard</span>
-            </div>
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.path);
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => handleNavigation(item.path)}
+                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors w-full text-left ${
+                    active
+                      ? "bg-gradient-to-r from-[#e01414] via-[#760da3] to-[#008cff] text-white"
+                      : "text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="font-medium">{item.label}</span>
+                </button>
+              );
+            })}
           </nav>
 
           {/* Logout */}
@@ -82,4 +109,3 @@ export default function Sidebar() {
     </>
   );
 }
-

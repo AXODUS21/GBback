@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import Sidebar from "@/components/Sidebar"
 import Header from "@/components/Header"
+import { generateVoucherCode } from "@/lib/utils"
 
 type Application = {
   id: string
@@ -21,6 +22,7 @@ type Application = {
   academic_goals: string | null
   student_count: number
   voucher_amount: number | null
+  voucher_code: string | null
   country: string
   status: "pending" | "approved" | "rejected"
   applied_date: string
@@ -119,13 +121,43 @@ export default function AdminDashboard() {
       const application = applications.find((app) => app.id === id)
       if (!application) return
 
+      // Generate unique voucher code if approving and has voucher amount
+      let voucherCode: string | null = null
+      if (newStatus === "approved" && application.voucher_amount) {
+        // Generate unique voucher code, retry if duplicate
+        let attempts = 0
+        const maxAttempts = 10
+        while (attempts < maxAttempts) {
+          voucherCode = generateVoucherCode()
+          // Check if code already exists
+          const { data: existing } = await supabase
+            .from("scholarship_applications")
+            .select("id")
+            .eq("voucher_code", voucherCode)
+            .single()
+          
+          if (!existing) break // Code is unique
+          attempts++
+        }
+        
+        if (attempts >= maxAttempts) {
+          throw new Error("Failed to generate unique voucher code. Please try again.")
+        }
+      }
+
       // Update in Supabase
+      const updateData: any = {
+        status: newStatus,
+        reviewed_at: new Date().toISOString(),
+      }
+      
+      if (voucherCode) {
+        updateData.voucher_code = voucherCode
+      }
+
       const { error: updateError } = await supabase
         .from("scholarship_applications")
-        .update({
-          status: newStatus,
-          reviewed_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq("id", id)
 
       if (updateError) throw updateError
