@@ -10,6 +10,7 @@ import { Loader2, CheckCircle, XCircle, Building2, Mail, Phone, MapPin, AlertTri
 
 type VendorSignup = {
   id: string
+  user_id: string | null
   email: string
   vendor_name: string
   vendor_type: string

@@ -74,6 +74,7 @@ export default function VendorSignupPage() {
         .from("vendor_signups")
         .insert([
           {
+            user_id: authData.user.id,
             email: formData.email,
             vendor_name: formData.vendorName,
             vendor_type: formData.vendorType,
@@ -86,8 +87,7 @@ export default function VendorSignupPage() {
         ])
 
       if (signupError) {
-        // If signup record fails, we should clean up
-        await supabase.auth.admin.deleteUser(authData.user.id).catch(console.error)
+        console.error("Signup record error:", signupError)
         throw signupError
       }
 

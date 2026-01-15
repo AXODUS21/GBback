@@ -67,6 +67,7 @@ export default function SignupPage() {
         .from("school_signups")
         .insert([
           {
+            user_id: authData.user.id,
             email: formData.email,
             school_name: formData.schoolName,
             contact_name: formData.contactName,
@@ -82,8 +83,7 @@ export default function SignupPage() {
         ])
 
       if (signupError) {
-        // If signup record fails, we should clean up the auth user
-        await supabase.auth.admin.deleteUser(authData.user.id).catch(console.error)
+        console.error("Signup record error:", signupError)
         throw signupError
       }
 
