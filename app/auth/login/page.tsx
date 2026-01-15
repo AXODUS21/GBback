@@ -50,13 +50,37 @@ export default function LoginPage() {
         }
       }
 
+      // Check if vendor is approved
+      if (profile.role === "vendor") {
+        const { data: vendorProfile } = await supabase
+          .from("vendor_profiles")
+          .select("id, status")
+          .eq("id", data.user.id)
+          .single()
+
+        if (!vendorProfile) {
+          await supabase.auth.signOut()
+          throw new Error("Your vendor account is pending approval. Please wait for admin approval.")
+        }
+
+        if (vendorProfile.status === "suspended") {
+          await supabase.auth.signOut()
+          throw new Error("Your vendor account has been suspended. Please contact support.")
+        }
+      }
+
       toast.success("Login successful!")
       
       // Redirect based on role
       if (profile.role === "admin") {
         router.push("/")
-      } else {
+      } else if (profile.role === "school") {
         router.push("/apply")
+      } else if (profile.role === "vendor") {
+        // Vendors can access their vendor dashboard (you can create this later)
+        router.push("/vendor")
+      } else {
+        router.push("/")
       }
     } catch (error: any) {
       console.error("Login error:", error)
@@ -141,11 +165,15 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-2">
           <p className="text-sm text-gray-600">
             Don't have an account?{" "}
             <Link href="/auth/signup" className="text-indigo-600 hover:text-indigo-500 font-medium">
               Sign up as a school
+            </Link>
+            {" or "}
+            <Link href="/auth/vendor-signup" className="text-indigo-600 hover:text-indigo-500 font-medium">
+              Sign up as a vendor
             </Link>
           </p>
         </div>

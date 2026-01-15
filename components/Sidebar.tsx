@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, LogOut, Menu, X, Ticket, School, FileText } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu, X, Ticket, School, FileText, Building2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function Sidebar() {
@@ -42,6 +42,11 @@ export default function Sidebar() {
       path: "/admin/school-signups",
       label: "School Signups",
       icon: School,
+    },
+    {
+      path: "/admin/vendor-signups",
+      label: "Vendor Signups",
+      icon: Building2,
     },
     {
       path: "/vouchers",

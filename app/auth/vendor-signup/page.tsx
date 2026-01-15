@@ -2,12 +2,12 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Mail, Lock, School, Phone, MapPin, Globe, Users, FileText, Loader2 } from "lucide-react"
+import { Mail, Lock, Building2, Phone, MapPin, FileText, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import Link from "next/link"
 
-export default function SignupPage() {
+export default function VendorSignupPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -15,18 +15,14 @@ export default function SignupPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    schoolName: "",
+    vendorName: "",
+    vendorType: "",
+    country: "",
     contactName: "",
     contactPhone: "",
-    schoolAddress: "",
-    schoolDistrict: "",
-    schoolType: "",
-    studentCount: "",
-    website: "",
-    additionalInfo: "",
   })
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
@@ -62,33 +58,41 @@ export default function SignupPage() {
         throw new Error("Failed to create user account")
       }
 
-      // Create school signup record for admin approval
+      // Update user profile role to vendor
+      const { error: profileError } = await supabase
+        .from("user_profiles")
+        .update({ role: "vendor" })
+        .eq("id", authData.user.id)
+
+      if (profileError) {
+        console.error("Profile update error:", profileError)
+        // Continue anyway, might already be set by trigger
+      }
+
+      // Create vendor signup record for admin approval
       const { error: signupError } = await supabase
-        .from("school_signups")
+        .from("vendor_signups")
         .insert([
           {
             email: formData.email,
-            school_name: formData.schoolName,
+            vendor_name: formData.vendorName,
+            vendor_type: formData.vendorType,
+            country: formData.country,
             contact_name: formData.contactName,
             contact_phone: formData.contactPhone || null,
-            school_address: formData.schoolAddress || null,
-            school_district: formData.schoolDistrict || null,
-            school_type: formData.schoolType || null,
-            student_count: formData.studentCount ? parseInt(formData.studentCount) : null,
-            website: formData.website || null,
-            additional_info: formData.additionalInfo || null,
-            status: "pending",
+            status: "submitted",
+            risk_flag: false,
           },
         ])
 
       if (signupError) {
-        // If signup record fails, we should clean up the auth user
+        // If signup record fails, we should clean up
         await supabase.auth.admin.deleteUser(authData.user.id).catch(console.error)
         throw signupError
       }
 
-      toast.success("Registration submitted! Your account is pending admin approval.")
-      router.push("/auth/login?pending=true")
+      toast.success("Registration submitted! Your vendor account is pending admin approval.")
+      router.push("/auth/login?pending=vendor")
     } catch (error: any) {
       console.error("Signup error:", error)
       setError(error.message || "Failed to create account. Please try again.")
@@ -103,12 +107,12 @@ export default function SignupPage() {
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-2xl">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <School className="h-12 w-12 text-indigo-600" />
+            <Building2 className="h-12 w-12 text-indigo-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            School Registration
+            Vendor Registration
           </h1>
-          <p className="text-gray-600">Register your school to apply for scholarships</p>
+          <p className="text-gray-600">Register as a vendor partner</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -127,26 +131,26 @@ export default function SignupPage() {
                   onChange={handleChange}
                   required
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                  placeholder="school@example.com"
+                  placeholder="vendor@example.com"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="schoolName" className="block text-sm font-medium text-gray-700 mb-2">
-                School Name <span className="text-red-500">*</span>
+              <label htmlFor="vendorName" className="block text-sm font-medium text-gray-700 mb-2">
+                Vendor Name <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <School className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
-                  id="schoolName"
-                  name="schoolName"
+                  id="vendorName"
+                  name="vendorName"
                   type="text"
-                  value={formData.schoolName}
+                  value={formData.vendorName}
                   onChange={handleChange}
                   required
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                  placeholder="Your School Name"
+                  placeholder="Your Company Name"
                 />
               </div>
             </div>
@@ -196,6 +200,49 @@ export default function SignupPage() {
 
           <div className="grid md:grid-cols-2 gap-6">
             <div>
+              <label htmlFor="vendorType" className="block text-sm font-medium text-gray-700 mb-2">
+                Vendor Type <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="vendorType"
+                name="vendorType"
+                value={formData.vendorType}
+                onChange={handleChange}
+                required
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+              >
+                <option value="">Select vendor type</option>
+                <option value="Educational Services">Educational Services</option>
+                <option value="Technology Provider">Technology Provider</option>
+                <option value="Training & Development">Training & Development</option>
+                <option value="Consulting">Consulting</option>
+                <option value="Supply Chain">Supply Chain</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="country" className="block text-sm font-medium text-gray-700 mb-2">
+                Country <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  id="country"
+                  name="country"
+                  type="text"
+                  value={formData.country}
+                  onChange={handleChange}
+                  required
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                  placeholder="Country"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
               <label htmlFor="contactName" className="block text-sm font-medium text-gray-700 mb-2">
                 Contact Name <span className="text-red-500">*</span>
               </label>
@@ -230,118 +277,6 @@ export default function SignupPage() {
             </div>
           </div>
 
-          <div>
-            <label htmlFor="schoolAddress" className="block text-sm font-medium text-gray-700 mb-2">
-              School Address
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-              <input
-                id="schoolAddress"
-                name="schoolAddress"
-                type="text"
-                value={formData.schoolAddress}
-                onChange={handleChange}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                placeholder="Street address"
-              />
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="schoolDistrict" className="block text-sm font-medium text-gray-700 mb-2">
-                School District
-              </label>
-              <input
-                id="schoolDistrict"
-                name="schoolDistrict"
-                type="text"
-                value={formData.schoolDistrict}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                placeholder="District name"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="schoolType" className="block text-sm font-medium text-gray-700 mb-2">
-                School Type
-              </label>
-              <select
-                id="schoolType"
-                name="schoolType"
-                value={formData.schoolType}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-              >
-                <option value="">Select type</option>
-                <option value="Elementary">Elementary School</option>
-                <option value="Middle">Middle School</option>
-                <option value="High School">High School</option>
-                <option value="College">College</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="studentCount" className="block text-sm font-medium text-gray-700 mb-2">
-                Student Count
-              </label>
-              <div className="relative">
-                <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  id="studentCount"
-                  name="studentCount"
-                  type="number"
-                  value={formData.studentCount}
-                  onChange={handleChange}
-                  min="1"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                  placeholder="Number of students"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="website" className="block text-sm font-medium text-gray-700 mb-2">
-                Website
-              </label>
-              <div className="relative">
-                <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  id="website"
-                  name="website"
-                  type="url"
-                  value={formData.website}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                  placeholder="https://school.com"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="additionalInfo" className="block text-sm font-medium text-gray-700 mb-2">
-              Additional Information
-            </label>
-            <div className="relative">
-              <FileText className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
-              <textarea
-                id="additionalInfo"
-                name="additionalInfo"
-                value={formData.additionalInfo}
-                onChange={handleChange}
-                rows={4}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
-                placeholder="Any additional information about your school..."
-              />
-            </div>
-          </div>
-
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
@@ -355,22 +290,22 @@ export default function SignupPage() {
                 Creating account...
               </>
             ) : (
-              "Register School"
+              "Register as Vendor"
             )}
           </button>
         </form>
 
-        <div className="mt-6 text-center space-y-2">
+        <div className="mt-6 text-center">
           <p className="text-sm text-gray-600">
             Already have an account?{" "}
             <Link href="/auth/login" className="text-indigo-600 hover:text-indigo-500 font-medium">
               Sign in
             </Link>
           </p>
-          <p className="text-xs text-gray-500">
-            Are you a vendor?{" "}
-            <Link href="/auth/vendor-signup" className="text-indigo-600 hover:text-indigo-500">
-              Sign up as a vendor instead
+          <p className="text-xs text-gray-500 mt-2">
+            Are you a school?{" "}
+            <Link href="/auth/signup" className="text-indigo-600 hover:text-indigo-500">
+              Sign up as a school instead
             </Link>
           </p>
         </div>
