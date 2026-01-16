@@ -25,7 +25,13 @@ export default function LoginPage() {
         password,
       })
 
-      if (signInError) throw signInError
+      if (signInError) {
+        // Handle email not confirmed error
+        if (signInError.message.includes("Email not confirmed") || signInError.message.includes("email_not_confirmed")) {
+          throw new Error("Please check your email and confirm your account before logging in.")
+        }
+        throw signInError
+      }
 
       // Check user role
       const { data: profile, error: profileError } = await supabase

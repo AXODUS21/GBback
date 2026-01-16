@@ -48,11 +48,17 @@ export default function ApplyPage() {
       }
 
       // Check if user is a school
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from("user_profiles")
         .select("role")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
+
+      if (profileError || !profile) {
+        toast.error("User profile not found. Please contact support.")
+        router.push("/auth/login")
+        return
+      }
 
       if (!profile || profile.role !== "school") {
         toast.error("Only approved schools can submit applications")
@@ -61,20 +67,20 @@ export default function ApplyPage() {
       }
 
       // Check if school is approved
-      const { data: schoolData } = await supabase
+      const { data: schoolData, error: schoolError } = await supabase
         .from("school_profiles")
         .select("*")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
 
-      // If profile doesn't exist, user is pending approval
-      if (!schoolData) {
+      // If profile doesn't exist or error (not found), user is pending approval
+      if (schoolError || !schoolData) {
         // Check signup status
         const { data: signupData } = await supabase
           .from("school_signups")
           .select("school_name, status")
           .eq("user_id", user.id)
-          .single()
+          .maybeSingle()
 
         if (signupData) {
           setSchoolProfile({
@@ -89,7 +95,7 @@ export default function ApplyPage() {
             isPending: true,
           })
         }
-        setIsLoadingSchool(false)
+        setIsLoading(false)
         return
       }
 

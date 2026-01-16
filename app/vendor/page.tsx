@@ -59,9 +59,9 @@ export default function VendorDashboard() {
         .from("user_profiles")
         .select("role")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
 
-      if (profileError || profile?.role !== "vendor") {
+      if (profileError || !profile || profile?.role !== "vendor") {
         toast.error("Access Denied: You must be a vendor to view this page.")
         router.push("/auth/login")
         return
@@ -72,16 +72,16 @@ export default function VendorDashboard() {
         .from("vendor_profiles")
         .select("*")
         .eq("id", user.id)
-        .single()
+        .maybeSingle()
 
-      // If profile doesn't exist, user is pending approval
+      // If profile doesn't exist or error (not found), user is pending approval
       if (vendorError || !vendorData) {
         // Check signup status
         const { data: signupData } = await supabase
           .from("vendor_signups")
           .select("vendor_name, status")
           .eq("user_id", user.id)
-          .single()
+          .maybeSingle()
 
         if (signupData) {
           setVendorProfile({
@@ -144,7 +144,7 @@ export default function VendorDashboard() {
         .from("scholarship_applications")
         .select("id, voucher_code, student_name, school_name, voucher_amount, status")
         .eq("voucher_code", voucherCode.trim().toUpperCase())
-        .single()
+        .maybeSingle()
 
       let verificationStatus: "valid" | "invalid" | "not_found" = "not_found"
       let voucherApplicationId: string | null = null

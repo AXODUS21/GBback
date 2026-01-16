@@ -51,9 +51,14 @@ export default function SignupPage() {
 
     try {
       // First, create the auth user
+      // Note: Email confirmation is required by default in Supabase
+      // Users will need to confirm their email before they can log in
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/login`,
+        },
       })
 
       if (signUpError) throw signUpError

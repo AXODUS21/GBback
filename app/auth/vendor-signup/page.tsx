@@ -47,9 +47,14 @@ export default function VendorSignupPage() {
 
     try {
       // First, create the auth user
+      // Note: Email confirmation is required by default in Supabase
+      // Users will need to confirm their email before they can log in
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/login`,
+        },
       })
 
       if (signUpError) throw signUpError
@@ -58,20 +63,29 @@ export default function VendorSignupPage() {
         throw new Error("Failed to create user account")
       }
 
-      // Create or update user profile with vendor role
+      // Update user profile role to vendor (profile may already exist from trigger)
       const { error: profileError } = await supabase
         .from("user_profiles")
-        .upsert({
-          id: authData.user.id,
-          email: formData.email,
+        .update({
           role: "vendor",
-        }, {
-          onConflict: 'id'
+          email: formData.email,
         })
+        .eq("id", authData.user.id)
 
+      // If update fails (profile doesn't exist), try insert
       if (profileError) {
-        console.error("Profile error:", profileError)
-        throw profileError
+        const { error: insertError } = await supabase
+          .from("user_profiles")
+          .insert({
+            id: authData.user.id,
+            email: formData.email,
+            role: "vendor",
+          })
+
+        if (insertError) {
+          console.error("Profile error:", insertError)
+          throw insertError
+        }
       }
 
       // Create vendor signup record for admin approval
