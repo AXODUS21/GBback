@@ -58,15 +58,20 @@ export default function VendorSignupPage() {
         throw new Error("Failed to create user account")
       }
 
-      // Update user profile role to vendor
+      // Create or update user profile with vendor role
       const { error: profileError } = await supabase
         .from("user_profiles")
-        .update({ role: "vendor" })
-        .eq("id", authData.user.id)
+        .upsert({
+          id: authData.user.id,
+          email: formData.email,
+          role: "vendor",
+        }, {
+          onConflict: 'id'
+        })
 
       if (profileError) {
-        console.error("Profile update error:", profileError)
-        // Continue anyway, might already be set by trigger
+        console.error("Profile error:", profileError)
+        throw profileError
       }
 
       // Create vendor signup record for admin approval

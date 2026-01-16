@@ -49,6 +49,11 @@ export default function Sidebar() {
       icon: Building2,
     },
     {
+      path: "/admin/vendor-vouchers",
+      label: "Vendor Vouchers",
+      icon: Ticket,
+    },
+    {
       path: "/vouchers",
       label: "Vouchers",
       icon: Ticket,
