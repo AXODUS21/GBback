@@ -36,14 +36,30 @@ export default function VouchersPage() {
   })
 
   useEffect(() => {
-    const isAuth = localStorage.getItem("adminAuth")
-    if (!isAuth) {
-      router.push("/auth")
+    checkAuth()
+  }, [router])
+
+  const checkAuth = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      router.push("/auth/login")
       return
     }
 
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    if (!profile || profile.role !== "admin") {
+      router.push("/auth/login")
+      return
+    }
+
+    // Load vouchers once authenticated
     loadVouchers()
-  }, [router])
+  }
 
   const loadVouchers = async () => {
     try {
@@ -87,10 +103,79 @@ export default function VouchersPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-          <p className="text-gray-600">Loading vouchers...</p>
+      <div className="min-h-screen bg-gray-50">
+        <Sidebar />
+        <div className="lg:pl-64">
+          <Header userName="Admin User" role="admin" />
+          <main className="p-6">
+            <div className="mb-8">
+              <div className="h-9 bg-gray-200 rounded w-64 mb-2 animate-pulse"></div>
+              <div className="h-4 bg-gray-200 rounded w-96 animate-pulse"></div>
+            </div>
+
+            {/* Stats Overview Skeleton */}
+            <div className="grid gap-4 md:grid-cols-2 mb-8">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                  <div className="animate-pulse space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="h-4 bg-gray-200 rounded w-32"></div>
+                      <div className="h-4 w-4 bg-gray-200 rounded"></div>
+                    </div>
+                    <div className="h-8 bg-gray-200 rounded w-24"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Vouchers List Skeleton */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+              <div className="animate-pulse space-y-6">
+                <div className="h-6 bg-gray-200 rounded w-32"></div>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="bg-white rounded-lg border-2 border-amber-400 shadow-md overflow-hidden">
+                      <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-b-2 border-amber-400 px-4 py-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-20 bg-gray-200 rounded"></div>
+                            <div className="space-y-2">
+                              <div className="h-4 bg-gray-200 rounded w-32"></div>
+                              <div className="h-3 bg-gray-200 rounded w-48"></div>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="h-3 bg-gray-200 rounded w-24"></div>
+                            <div className="h-6 bg-gray-200 rounded w-32"></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="px-4 py-4 space-y-3">
+                        <div className="flex items-center justify-between pb-3 border-b border-gray-200">
+                          <div className="space-y-2">
+                            <div className="h-3 bg-gray-200 rounded w-20"></div>
+                            <div className="h-5 bg-gray-200 rounded w-32"></div>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="h-3 bg-gray-200 rounded w-16"></div>
+                            <div className="h-6 bg-gray-200 rounded w-20"></div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[1, 2, 3, 4].map((j) => (
+                            <div key={j} className="space-y-1">
+                              <div className="h-3 bg-gray-200 rounded w-20"></div>
+                              <div className="h-4 bg-gray-200 rounded w-28"></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </main>
         </div>
       </div>
     )

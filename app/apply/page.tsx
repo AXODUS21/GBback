@@ -161,8 +161,40 @@ export default function ApplyPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <div className="min-h-screen bg-gray-50">
+        <Sidebar />
+        <div className="lg:pl-64">
+          <Header userName="School User" role="school" />
+          <main className="p-6">
+            <div className="max-w-3xl mx-auto">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                <div className="animate-pulse space-y-6">
+                  <div className="space-y-2">
+                    <div className="h-8 bg-gray-200 rounded w-64"></div>
+                    <div className="h-4 bg-gray-200 rounded w-96"></div>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                      <div key={i} className="space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-24"></div>
+                        <div className="h-10 bg-gray-200 rounded w-full"></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-32"></div>
+                    <div className="h-24 bg-gray-200 rounded w-full"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-28"></div>
+                    <div className="h-24 bg-gray-200 rounded w-full"></div>
+                  </div>
+                  <div className="h-12 bg-gray-200 rounded w-full mt-6"></div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
       </div>
     )
   }
