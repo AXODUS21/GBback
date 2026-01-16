@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import Sidebar from "@/components/Sidebar"
 import Header from "@/components/Header"
-import { Ticket, DollarSign, Loader2, Plus, Package, AlertCircle, CheckCircle, XCircle } from "lucide-react"
+import { Ticket, DollarSign, Loader2, Plus, Package, AlertCircle, CheckCircle, XCircle, User, Clock, Info } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -55,6 +55,7 @@ export default function SchoolDashboard() {
   const [vouchers, setVouchers] = useState<Voucher[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [schoolProfile, setSchoolProfile] = useState<any>(null)
+  const [signupStatus, setSignupStatus] = useState<any>(null)
   const [showRequestForm, setShowRequestForm] = useState(false)
   const [requestForm, setRequestForm] = useState({
     requested_amount: "",
@@ -144,6 +145,16 @@ export default function SchoolDashboard() {
       }
 
       setSchoolProfile(schoolData)
+
+      // Load signup status
+      const { data: signupData } = await supabase
+        .from("school_signups")
+        .select("status, reviewed_at, review_notes")
+        .eq("user_id", user.id)
+        .maybeSingle()
+
+      setSignupStatus(signupData)
+      
       await Promise.all([
         loadVoucherRequests(user.id),
         loadVouchers(user.id),
@@ -279,6 +290,122 @@ export default function SchoolDashboard() {
             </h1>
             <p className="text-gray-600">Manage your vouchers and view available vendors</p>
           </div>
+
+          {/* Account Status Section */}
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5 text-indigo-600" />
+                Account Status
+              </CardTitle>
+              <CardDescription>Your school account information and approval status</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-600 mb-1">School Name</p>
+                    <p className="font-semibold text-gray-900">{schoolProfile?.school_name || "N/A"}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {signupStatus?.status === "approved" && (
+                      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1">
+                        <CheckCircle className="h-4 w-4" />
+                        Approved
+                      </span>
+                    )}
+                    {signupStatus?.status === "pending" && (
+                      <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        Pending Review
+                      </span>
+                    )}
+                    {signupStatus?.status === "waitlisted" && (
+                      <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-medium flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        Waitlisted
+                      </span>
+                    )}
+                    {signupStatus?.status === "rejected" && (
+                      <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium flex items-center gap-1">
+                        <XCircle className="h-4 w-4" />
+                        Rejected
+                      </span>
+                    )}
+                    {!signupStatus && (
+                      <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium flex items-center gap-1">
+                        <Info className="h-4 w-4" />
+                        Active
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  {schoolProfile?.contact_name && (
+                    <div>
+                      <p className="text-gray-600">Contact Name</p>
+                      <p className="font-medium text-gray-900">{schoolProfile.contact_name}</p>
+                    </div>
+                  )}
+                  {schoolProfile?.contact_phone && (
+                    <div>
+                      <p className="text-gray-600">Contact Phone</p>
+                      <p className="font-medium text-gray-900">{schoolProfile.contact_phone}</p>
+                    </div>
+                  )}
+                  {schoolProfile?.school_district && (
+                    <div>
+                      <p className="text-gray-600">District</p>
+                      <p className="font-medium text-gray-900">{schoolProfile.school_district}</p>
+                    </div>
+                  )}
+                  {schoolProfile?.country && (
+                    <div>
+                      <p className="text-gray-600">Country</p>
+                      <p className="font-medium text-gray-900">{schoolProfile.country}</p>
+                    </div>
+                  )}
+                </div>
+
+                {signupStatus?.review_notes && (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <p className="text-sm font-medium text-gray-900 mb-1">Admin Notes</p>
+                    <p className="text-sm text-gray-600">{signupStatus.review_notes}</p>
+                  </div>
+                )}
+
+                {signupStatus?.status === "pending" && (
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-900">Account Under Review</p>
+                        <p className="text-sm text-blue-700 mt-1">
+                          Your school registration is currently being reviewed by our administration team. 
+                          You will receive an email notification once your account has been approved.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {signupStatus?.status === "waitlisted" && (
+                  <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-5 w-5 text-orange-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-orange-900">Account Waitlisted</p>
+                        <p className="text-sm text-orange-700 mt-1">
+                          Your school registration has been waitlisted. We'll contact you when a spot becomes available.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Stats Overview */}
           <div className="grid gap-4 md:grid-cols-3 mb-8">

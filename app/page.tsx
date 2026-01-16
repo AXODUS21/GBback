@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { School, DollarSign, Globe, CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { School, DollarSign, Globe, CheckCircle, XCircle, Loader2, Info } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import Sidebar from "@/components/Sidebar"
@@ -428,7 +428,10 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-2">Scholarship Applications</h2>
-              <p className="text-sm text-gray-600">Review and manage scholarship applications</p>
+              <p className="text-sm text-gray-600">Review and manage student scholarship applications submitted by schools</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Note: For school voucher requests, please visit the <a href="/admin/voucher-requests" className="text-indigo-600 hover:underline">Voucher Requests</a> page
+              </p>
             </div>
             <button
               onClick={loadData}
@@ -492,8 +495,6 @@ export default function AdminDashboard() {
                       <ApplicationCard
                         key={app.id}
                         application={app}
-                        onStatusChange={handleStatusChange}
-                        isUpdating={isUpdating === app.id}
                       />
                     ))
                   )
@@ -507,8 +508,6 @@ export default function AdminDashboard() {
                       <ApplicationCard
                         key={app.id}
                         application={app}
-                        onStatusChange={handleStatusChange}
-                        isUpdating={isUpdating === app.id}
                       />
                     ))
                   )
@@ -522,8 +521,6 @@ export default function AdminDashboard() {
                       <ApplicationCard
                         key={app.id}
                         application={app}
-                        onStatusChange={handleStatusChange}
-                        isUpdating={isUpdating === app.id}
                       />
                     ))
                   )
@@ -539,12 +536,8 @@ export default function AdminDashboard() {
 
 function ApplicationCard({
   application,
-  onStatusChange,
-  isUpdating,
 }: {
   application: Application
-  onStatusChange: (id: string, status: "approved" | "rejected") => void
-  isUpdating: boolean
 }) {
   const getStatusBadgeColor = () => {
     if (application.status === "approved") {
@@ -625,41 +618,11 @@ function ApplicationCard({
       </div>
 
       {application.status === "pending" && (
-        <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
-          <button
-            onClick={() => onStatusChange(application.id, "approved")}
-            disabled={isUpdating}
-            className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-[#e01414] via-[#760da3] to-[#008cff] hover:opacity-90 text-white font-medium py-2 px-4 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isUpdating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <CheckCircle className="h-4 w-4" />
-                Approve Application
-              </>
-            )}
-          </button>
-          <button
-            onClick={() => onStatusChange(application.id, "rejected")}
-            disabled={isUpdating}
-            className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isUpdating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <XCircle className="h-4 w-4" />
-                Reject Application
-              </>
-            )}
-          </button>
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Info className="h-4 w-4" />
+            <span>This application is pending review. Please visit the <a href="/admin/voucher-requests" className="text-indigo-600 hover:underline font-medium">Voucher Requests</a> page to approve or reject.</span>
+          </div>
         </div>
       )}
     </div>

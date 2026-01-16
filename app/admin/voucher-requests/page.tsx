@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import Sidebar from "@/components/Sidebar"
 import Header from "@/components/Header"
-import { Loader2, CheckCircle, XCircle, Ticket, DollarSign, School } from "lucide-react"
+import { Loader2, CheckCircle, XCircle, Ticket, DollarSign, School, FileText, User as UserIcon } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { generateVoucherCode } from "@/lib/utils"
 
@@ -25,16 +25,41 @@ type VoucherRequest = {
   school_email?: string
 }
 
+type ScholarshipApplication = {
+  id: string
+  student_name: string
+  email: string
+  phone: string | null
+  school_name: string
+  district: string | null
+  grade_level: string | null
+  program_type: string
+  financial_need_description: string | null
+  academic_goals: string | null
+  student_count: number
+  voucher_amount: number | null
+  voucher_code: string | null
+  country: string
+  status: "pending" | "approved" | "rejected"
+  applied_date: string
+  reviewed_at: string | null
+  notes: string | null
+  school_id: string
+}
+
 export default function VoucherRequestsPage() {
   const router = useRouter()
   const [requests, setRequests] = useState<VoucherRequest[]>([])
+  const [scholarshipApplications, setScholarshipApplications] = useState<ScholarshipApplication[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState<string | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
+  const [activeTab, setActiveTab] = useState<"vouchers" | "scholarships">("vouchers")
 
   useEffect(() => {
     checkAuth()
     loadRequests()
+    loadScholarshipApplications()
   }, [])
 
   const checkAuth = async () => {
@@ -89,6 +114,29 @@ export default function VoucherRequestsPage() {
       toast.error("Failed to load voucher requests")
     } finally {
       setIsLoading(false)
+    }
+  }, [])
+
+  const loadScholarshipApplications = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("scholarship_applications")
+        .select("*")
+        .order("applied_date", { ascending: false })
+
+      if (error) throw error
+
+      const formattedApps = (data || []).map((app: any) => ({
+        ...app,
+        applied_date: app.applied_date 
+          ? new Date(app.applied_date).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0],
+      }))
+
+      setScholarshipApplications(formattedApps as ScholarshipApplication[])
+    } catch (error: any) {
+      console.error("Error loading scholarship applications:", error)
+      toast.error("Failed to load scholarship applications")
     }
   }, [])
 
@@ -195,6 +243,98 @@ export default function VoucherRequestsPage() {
     }
   }
 
+  const handleScholarshipStatusChange = async (
+    applicationId: string,
+    newStatus: "approved" | "rejected",
+    notes?: string
+  ) => {
+    setIsUpdating(applicationId)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Not authenticated")
+
+      const application = scholarshipApplications.find(a => a.id === applicationId)
+      if (!application) throw new Error("Application not found")
+
+      // Generate unique voucher code if approving and has voucher amount
+      let voucherCode: string | null = null
+      if (newStatus === "approved" && application.voucher_amount) {
+        let attempts = 0
+        const maxAttempts = 10
+
+        while (attempts < maxAttempts) {
+          voucherCode = generateVoucherCode()
+          const { data: existing } = await supabase
+            .from("scholarship_applications")
+            .select("id")
+            .eq("voucher_code", voucherCode)
+            .maybeSingle()
+
+          if (!existing) break
+          attempts++
+        }
+
+        if (attempts >= maxAttempts || !voucherCode) {
+          throw new Error("Failed to generate unique voucher code. Please try again.")
+        }
+      }
+
+      // Update in Supabase
+      const updateData: any = {
+        status: newStatus,
+        reviewed_at: new Date().toISOString(),
+      }
+
+      if (voucherCode) {
+        updateData.voucher_code = voucherCode
+      }
+
+      if (notes) {
+        updateData.notes = notes
+      }
+
+      const { error: updateError } = await supabase
+        .from("scholarship_applications")
+        .update(updateData)
+        .eq("id", applicationId)
+
+      if (updateError) throw updateError
+
+      // Send email notification
+      if (newStatus === "approved") {
+        try {
+          const response = await fetch("/api/send-email", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              to: application.email,
+              studentName: application.student_name,
+              status: "approved",
+              schoolName: application.school_name,
+              programType: application.program_type,
+            }),
+          })
+
+          if (!response.ok) {
+            console.error("Failed to send email notification")
+          }
+        } catch (emailError) {
+          console.error("Email error:", emailError)
+        }
+      }
+
+      toast.success(`Scholarship application ${newStatus} successfully!`)
+      await loadScholarshipApplications()
+    } catch (error: any) {
+      console.error("Error updating scholarship application:", error)
+      toast.error(error.message || "Failed to update application")
+    } finally {
+      setIsUpdating(null)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -219,6 +359,13 @@ export default function VoucherRequestsPage() {
   const approvedRequests = requests.filter(r => r.status === "approved")
   const rejectedRequests = requests.filter(r => r.status === "rejected")
 
+  const pendingScholarships = scholarshipApplications.filter(a => a.status === "pending")
+  const approvedScholarships = scholarshipApplications.filter(a => a.status === "approved")
+  const rejectedScholarships = scholarshipApplications.filter(a => a.status === "rejected")
+  const filteredScholarships = selectedStatus === "all"
+    ? scholarshipApplications
+    : scholarshipApplications.filter(a => a.status === selectedStatus)
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar />
@@ -227,10 +374,43 @@ export default function VoucherRequestsPage() {
         <main className="p-6">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Voucher Requests
+              Requests & Applications
             </h1>
-            <p className="text-gray-600">Review and approve school voucher requests</p>
+            <p className="text-gray-600">Review and approve voucher requests and scholarship applications</p>
           </div>
+
+          {/* Tabs */}
+          <div className="mb-6 flex gap-4 border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab("vouchers")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                activeTab === "vouchers"
+                  ? "border-b-2 border-indigo-600 text-indigo-600"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Ticket className="h-4 w-4" />
+                Voucher Requests ({requests.length})
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab("scholarships")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                activeTab === "scholarships"
+                  ? "border-b-2 border-indigo-600 text-indigo-600"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Scholarship Applications ({scholarshipApplications.length})
+              </div>
+            </button>
+          </div>
+
+          {activeTab === "vouchers" && (
+            <>
 
           {/* Stats Overview */}
           <div className="grid gap-4 md:grid-cols-4 mb-8">
@@ -395,6 +575,192 @@ export default function VoucherRequestsPage() {
               ))
             )}
           </div>
+            </>
+          )}
+
+          {activeTab === "scholarships" && (
+            <>
+              {/* Stats Overview for Scholarships */}
+              <div className="grid gap-4 md:grid-cols-4 mb-8">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold text-gray-900">{scholarshipApplications.length}</div>
+                    <div className="text-sm text-gray-600">Total Applications</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold text-yellow-600">{pendingScholarships.length}</div>
+                    <div className="text-sm text-gray-600">Pending</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold text-green-600">{approvedScholarships.length}</div>
+                    <div className="text-sm text-gray-600">Approved</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold text-red-600">{rejectedScholarships.length}</div>
+                    <div className="text-sm text-gray-600">Rejected</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Filter */}
+              <div className="mb-6">
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900"
+                >
+                  <option value="all">All Applications</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              {/* Scholarship Applications List */}
+              <div className="space-y-4">
+                {filteredScholarships.length === 0 ? (
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="text-center py-8">
+                        <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-500">No scholarship applications found</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  filteredScholarships.map((application) => (
+                    <Card key={application.id}>
+                      <CardContent className="pt-6">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <UserIcon className="h-5 w-5 text-indigo-600" />
+                              <span className="font-semibold text-lg">{application.student_name}</span>
+                              <span className="text-sm text-gray-600">from {application.school_name}</span>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-4 text-sm mb-4">
+                              <div>
+                                <p className="text-gray-600">Email</p>
+                                <p className="font-medium text-gray-900">{application.email}</p>
+                              </div>
+                              {application.phone && (
+                                <div>
+                                  <p className="text-gray-600">Phone</p>
+                                  <p className="font-medium text-gray-900">{application.phone}</p>
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-gray-600">Program Type</p>
+                                <p className="font-medium text-gray-900">{application.program_type}</p>
+                              </div>
+                              {application.grade_level && (
+                                <div>
+                                  <p className="text-gray-600">Grade Level</p>
+                                  <p className="font-medium text-gray-900">{application.grade_level}</p>
+                                </div>
+                              )}
+                              {application.voucher_amount && (
+                                <div>
+                                  <p className="text-gray-600">Voucher Amount</p>
+                                  <p className="font-medium text-indigo-600">${application.voucher_amount}</p>
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-gray-600">Applied Date</p>
+                                <p className="font-medium text-gray-900">
+                                  {new Date(application.applied_date).toLocaleDateString()}
+                                </p>
+                              </div>
+                              {application.voucher_code && (
+                                <div>
+                                  <p className="text-gray-600">Voucher Code</p>
+                                  <p className="font-mono font-medium text-indigo-600">{application.voucher_code}</p>
+                                </div>
+                              )}
+                            </div>
+                            {application.financial_need_description && (
+                              <div className="mt-2 mb-2">
+                                <p className="text-sm font-medium text-gray-900">Financial Need:</p>
+                                <p className="text-sm text-gray-600">{application.financial_need_description}</p>
+                              </div>
+                            )}
+                            {application.academic_goals && (
+                              <div className="mt-2">
+                                <p className="text-sm font-medium text-gray-900">Academic Goals:</p>
+                                <p className="text-sm text-gray-600">{application.academic_goals}</p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-2 ml-4">
+                            {application.status === "pending" && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    const notes = prompt("Enter approval notes (optional):")
+                                    if (notes !== null) {
+                                      handleScholarshipStatusChange(application.id, "approved", notes)
+                                    }
+                                  }}
+                                  disabled={isUpdating === application.id}
+                                  className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isUpdating === application.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <CheckCircle className="h-4 w-4" />
+                                      Approve
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const notes = prompt("Enter rejection reason (optional):")
+                                    if (notes !== null) {
+                                      handleScholarshipStatusChange(application.id, "rejected", notes)
+                                    }
+                                  }}
+                                  disabled={isUpdating === application.id}
+                                  className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isUpdating === application.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <XCircle className="h-4 w-4" />
+                                      Reject
+                                    </>
+                                  )}
+                                </button>
+                              </>
+                            )}
+                            {application.status === "approved" && (
+                              <span className="px-3 py-2 bg-green-100 text-green-800 rounded-lg text-sm font-medium flex items-center gap-2">
+                                <CheckCircle className="h-4 w-4" />
+                                Approved
+                              </span>
+                            )}
+                            {application.status === "rejected" && (
+                              <span className="px-3 py-2 bg-red-100 text-red-800 rounded-lg text-sm font-medium flex items-center gap-2">
+                                <XCircle className="h-4 w-4" />
+                                Rejected
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </>
+          )}
         </main>
       </div>
     </div>
