@@ -50,7 +50,7 @@ export default function Sidebar() {
     },
     {
       path: "/admin/voucher-requests",
-      label: "Voucher Requests",
+      label: "Scholarship Requests",
       icon: Ticket,
     },
     {
