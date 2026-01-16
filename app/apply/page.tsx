@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, CheckCircle } from "lucide-react"
+import { Loader2, CheckCircle, AlertCircle } from "lucide-react"
 
 export default function ApplyPage() {
   const router = useRouter()
@@ -67,9 +67,29 @@ export default function ApplyPage() {
         .eq("id", user.id)
         .single()
 
+      // If profile doesn't exist, user is pending approval
       if (!schoolData) {
-        toast.error("Your school account is pending approval")
-        router.push("/auth/login")
+        // Check signup status
+        const { data: signupData } = await supabase
+          .from("school_signups")
+          .select("school_name, status")
+          .eq("user_id", user.id)
+          .single()
+
+        if (signupData) {
+          setSchoolProfile({
+            school_name: signupData.school_name,
+            status: signupData.status,
+            isPending: true,
+          })
+        } else {
+          setSchoolProfile({
+            school_name: "School",
+            status: "pending",
+            isPending: true,
+          })
+        }
+        setIsLoadingSchool(false)
         return
       }
 
@@ -192,6 +212,49 @@ export default function ApplyPage() {
                   <div className="h-12 bg-gray-200 rounded w-full mt-6"></div>
                 </div>
               </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  // Show pending approval message if not approved
+  if (schoolProfile?.isPending) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Sidebar />
+        <div className="lg:pl-64">
+          <Header userName={schoolProfile?.school_name || "School"} role="school" />
+          <main className="p-6">
+            <div className="max-w-2xl mx-auto">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center py-12">
+                    <div className="flex justify-center mb-4">
+                      <div className="bg-yellow-100 rounded-full w-16 h-16 flex items-center justify-center">
+                        <AlertCircle className="h-8 w-8 text-yellow-600" />
+                      </div>
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                      Account Under Evaluation
+                    </h2>
+                    <p className="text-gray-600 mb-4">
+                      Your school account is currently pending admin approval. You will be able to submit scholarship applications once your account has been reviewed and approved.
+                    </p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+                      <p className="text-sm text-blue-800">
+                        <strong>What happens next?</strong>
+                      </p>
+                      <ul className="text-sm text-blue-700 mt-2 space-y-1 text-left max-w-md mx-auto">
+                        <li>• Our admin team will review your registration</li>
+                        <li>• You'll receive access to submit applications once approved</li>
+                        <li>• Check back later or contact support if you have questions</li>
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </main>
         </div>

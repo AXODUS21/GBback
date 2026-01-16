@@ -36,21 +36,7 @@ export default function LoginPage() {
 
       if (profileError) throw profileError
 
-      // Check if school is approved
-      if (profile.role === "school") {
-        const { data: schoolProfile } = await supabase
-          .from("school_profiles")
-          .select("id")
-          .eq("id", data.user.id)
-          .single()
-
-        if (!schoolProfile) {
-          await supabase.auth.signOut()
-          throw new Error("Your school account is pending approval. Please wait for admin approval.")
-        }
-      }
-
-      // Check if vendor is approved
+      // Check if vendor is suspended (still allow login but will be blocked in dashboard)
       if (profile.role === "vendor") {
         const { data: vendorProfile } = await supabase
           .from("vendor_profiles")
@@ -58,12 +44,7 @@ export default function LoginPage() {
           .eq("id", data.user.id)
           .single()
 
-        if (!vendorProfile) {
-          await supabase.auth.signOut()
-          throw new Error("Your vendor account is pending approval. Please wait for admin approval.")
-        }
-
-        if (vendorProfile.status === "suspended") {
+        if (vendorProfile && vendorProfile.status === "suspended") {
           await supabase.auth.signOut()
           throw new Error("Your vendor account has been suspended. Please contact support.")
         }
