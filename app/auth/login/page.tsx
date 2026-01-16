@@ -62,9 +62,8 @@ export default function LoginPage() {
       if (profile.role === "admin") {
         router.push("/")
       } else if (profile.role === "school") {
-        router.push("/apply")
+        router.push("/school-dashboard")
       } else if (profile.role === "vendor") {
-        // Vendors can access their vendor dashboard (you can create this later)
         router.push("/vendor")
       } else {
         router.push("/")

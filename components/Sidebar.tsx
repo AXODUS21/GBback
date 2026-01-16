@@ -49,6 +49,11 @@ export default function Sidebar() {
       icon: Building2,
     },
     {
+      path: "/admin/voucher-requests",
+      label: "Voucher Requests",
+      icon: Ticket,
+    },
+    {
       path: "/admin/vendor-vouchers",
       label: "Vendor Vouchers",
       icon: Ticket,
@@ -61,6 +66,11 @@ export default function Sidebar() {
   ];
 
   const schoolNavigationItems = [
+    {
+      path: "/school-dashboard",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+    },
     {
       path: "/apply",
       label: "Apply for Scholarship",
