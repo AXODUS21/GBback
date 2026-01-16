@@ -109,42 +109,25 @@ export default function VendorSignupsPage() {
       if (updateError) throw updateError
 
       if (newStatus === "approved" || newStatus === "active") {
-        // Get the auth user ID from email
-        const { data: authUser } = await supabase.auth.admin.listUsers()
-        const userToApprove = authUser?.users.find(u => u.email === signup.email)
+        // Use the stored user_id from the signup
+        if (!signup.user_id) {
+          throw new Error("User ID not found in signup record")
+        }
 
-        if (userToApprove) {
-          // Check if profile already exists
-          const { data: existing } = await supabase
+        // Check if profile already exists
+        const { data: existing } = await supabase
+          .from("vendor_profiles")
+          .select("id")
+          .eq("id", signup.user_id)
+          .single()
+
+        if (!existing) {
+          // Create vendor profile
+          const { error: profileError } = await supabase
             .from("vendor_profiles")
-            .select("id")
-            .eq("id", userToApprove.id)
-            .single()
-
-          if (!existing) {
-            // Create vendor profile
-            const { error: profileError } = await supabase
-              .from("vendor_profiles")
-              .insert([
-                {
-                  id: userToApprove.id,
-                  vendor_name: signup.vendor_name,
-                  vendor_type: signup.vendor_type,
-                  country: signup.country,
-                  contact_name: signup.contact_name,
-                  contact_phone: signup.contact_phone,
-                  status: newStatus === "approved" ? "active" : newStatus,
-                  risk_flag: riskFlag !== undefined ? riskFlag : signup.risk_flag,
-                  notes: notes || signup.notes,
-                },
-              ])
-
-            if (profileError) throw profileError
-          } else {
-            // Update existing profile
-            const { error: profileError } = await supabase
-              .from("vendor_profiles")
-              .update({
+            .insert([
+              {
+                id: signup.user_id,
                 vendor_name: signup.vendor_name,
                 vendor_type: signup.vendor_type,
                 country: signup.country,
@@ -153,11 +136,27 @@ export default function VendorSignupsPage() {
                 status: newStatus === "approved" ? "active" : newStatus,
                 risk_flag: riskFlag !== undefined ? riskFlag : signup.risk_flag,
                 notes: notes || signup.notes,
-              })
-              .eq("id", userToApprove.id)
+              },
+            ])
 
-            if (profileError) throw profileError
-          }
+          if (profileError) throw profileError
+        } else {
+          // Update existing profile
+          const { error: profileError } = await supabase
+            .from("vendor_profiles")
+            .update({
+              vendor_name: signup.vendor_name,
+              vendor_type: signup.vendor_type,
+              country: signup.country,
+              contact_name: signup.contact_name,
+              contact_phone: signup.contact_phone,
+              status: newStatus === "approved" ? "active" : newStatus,
+              risk_flag: riskFlag !== undefined ? riskFlag : signup.risk_flag,
+              notes: notes || signup.notes,
+            })
+            .eq("id", signup.user_id)
+
+          if (profileError) throw profileError
         }
       }
 

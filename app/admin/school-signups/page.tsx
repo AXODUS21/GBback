@@ -126,6 +126,7 @@ export default function SchoolSignupsPage() {
                 school_type: signup.school_type,
                 student_count: signup.student_count,
                 website: signup.website,
+                country: "USA", // Default country (can be updated later if needed)
               },
             ])
 
