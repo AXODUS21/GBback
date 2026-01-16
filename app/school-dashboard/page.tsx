@@ -31,7 +31,7 @@ type Vendor = {
   vendor_type: string
   country: string
   contact_name: string
-  contact_email: string
+  contact_phone: string | null
   status: string
 }
 
@@ -59,7 +59,89 @@ export default function SchoolDashboard() {
     }
   }, [])
 
+  const loadVendors = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("vendor_profiles")
+        .select("id, vendor_name, vendor_type, country, contact_name, contact_phone, status")
+        .eq("status", "active")
+        .order("vendor_name", { ascending: true })
+
+      if (error) throw error
+      setVendors(data || [])
+    } catch (error: any) {
+      console.error("Error loading vendors:", error)
+      toast.error("Failed to load vendors")
+    }
+  }, [])
+
   useEffect(() => {
+    let mounted = true
+
+    const checkAuthAndLoad = async () => {
+      try {
+        setIsLoading(true)
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+        if (userError || !user) {
+          router.push("/auth/login")
+          return
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from("user_profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (profileError || profile?.role !== "school") {
+          toast.error("Access Denied: You must be a school to view this page.")
+          router.push("/auth/login")
+          return
+        }
+
+        // Load school profile
+        const { data: schoolData, error: schoolError } = await supabase
+          .from("school_profiles")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (schoolError || !schoolData) {
+          toast.error("School profile not found. Please contact support.")
+          router.push("/auth/login")
+          return
+        }
+
+        if (!mounted) return
+
+        setSchoolProfile(schoolData)
+
+        // Load signup status
+        const { data: signupData } = await supabase
+          .from("school_signups")
+          .select("status, reviewed_at, review_notes")
+          .eq("user_id", user.id)
+          .maybeSingle()
+
+        if (!mounted) return
+        setSignupStatus(signupData)
+        
+        await Promise.all([
+          loadVouchers(user.id),
+          loadVendors(),
+        ])
+      } catch (error: any) {
+        console.error("Error checking auth:", error)
+        toast.error("Failed to load dashboard")
+        router.push("/auth/login")
+      } finally {
+        if (mounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
     checkAuthAndLoad()
 
     // Set up real-time subscription for vouchers
@@ -74,92 +156,21 @@ export default function SchoolDashboard() {
         },
         (payload) => {
           console.log('Voucher change detected:', payload)
-          if (schoolProfile) {
-            loadVouchers(schoolProfile.id)
-          }
+          // Get current user ID from auth instead of schoolProfile
+          supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user && mounted) {
+              loadVouchers(user.id)
+            }
+          })
         }
       )
       .subscribe()
 
     return () => {
+      mounted = false
       vouchersChannel.unsubscribe()
     }
-  }, [schoolProfile, loadVouchers])
-
-  const checkAuthAndLoad = async () => {
-    try {
-      setIsLoading(true)
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        router.push("/auth/login")
-        return
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (profileError || profile?.role !== "school") {
-        toast.error("Access Denied: You must be a school to view this page.")
-        router.push("/auth/login")
-        return
-      }
-
-      // Load school profile
-      const { data: schoolData, error: schoolError } = await supabase
-        .from("school_profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (schoolError || !schoolData) {
-        toast.error("School profile not found. Please contact support.")
-        router.push("/auth/login")
-        return
-      }
-
-      setSchoolProfile(schoolData)
-
-      // Load signup status
-      const { data: signupData } = await supabase
-        .from("school_signups")
-        .select("status, reviewed_at, review_notes")
-        .eq("user_id", user.id)
-        .maybeSingle()
-
-      setSignupStatus(signupData)
-      
-      await Promise.all([
-        loadVouchers(user.id),
-        loadVendors(),
-      ])
-    } catch (error: any) {
-      console.error("Error checking auth:", error)
-      toast.error("Failed to load dashboard")
-      router.push("/auth/login")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const loadVendors = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("vendor_profiles")
-        .select("id, vendor_name, vendor_type, country, contact_name, contact_email, status")
-        .eq("status", "active")
-        .order("vendor_name", { ascending: true })
-
-      if (error) throw error
-      setVendors(data || [])
-    } catch (error: any) {
-      console.error("Error loading vendors:", error)
-      toast.error("Failed to load vendors")
-    }
-  }
+  }, [loadVouchers, loadVendors, router])
 
   if (isLoading) {
     return (
@@ -405,9 +416,11 @@ export default function SchoolDashboard() {
                       <p className="text-sm text-gray-600 mb-1">
                         <span className="font-medium">Contact:</span> {vendor.contact_name}
                       </p>
-                      <p className="text-sm text-indigo-600">
-                        {vendor.contact_email}
-                      </p>
+                      {vendor.contact_phone && (
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium">Phone:</span> {vendor.contact_phone}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
