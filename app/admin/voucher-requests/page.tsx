@@ -56,12 +56,6 @@ export default function VoucherRequestsPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>("all")
   const [activeTab, setActiveTab] = useState<"vouchers" | "scholarships">("vouchers")
 
-  useEffect(() => {
-    checkAuth()
-    loadRequests()
-    loadScholarshipApplications()
-  }, [])
-
   const checkAuth = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -83,7 +77,6 @@ export default function VoucherRequestsPage() {
 
   const loadRequests = useCallback(async () => {
     try {
-      setIsLoading(true)
       const { data, error } = await supabase
         .from("voucher_requests")
         .select("*")
@@ -112,8 +105,6 @@ export default function VoucherRequestsPage() {
     } catch (error: any) {
       console.error("Error loading voucher requests:", error)
       toast.error("Failed to load voucher requests")
-    } finally {
-      setIsLoading(false)
     }
   }, [])
 
@@ -334,6 +325,63 @@ export default function VoucherRequestsPage() {
       setIsUpdating(null)
     }
   }
+
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        setIsLoading(true)
+        await checkAuth()
+        await Promise.all([
+          loadRequests(),
+          loadScholarshipApplications()
+        ])
+      } catch (error) {
+        console.error("Error initializing data:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    initializeData()
+
+    // Set up real-time subscriptions
+    const requestsChannel = supabase
+      .channel('voucher_requests_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'voucher_requests'
+        },
+        (payload) => {
+          console.log('Voucher request change detected:', payload)
+          loadRequests()
+        }
+      )
+      .subscribe()
+
+    const applicationsChannel = supabase
+      .channel('scholarship_applications_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'scholarship_applications'
+        },
+        (payload) => {
+          console.log('Scholarship application change detected:', payload)
+          loadScholarshipApplications()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      requestsChannel.unsubscribe()
+      applicationsChannel.unsubscribe()
+    }
+  }, [loadRequests, loadScholarshipApplications])
 
   if (isLoading) {
     return (

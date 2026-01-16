@@ -428,9 +428,9 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-2">Scholarship Applications</h2>
-              <p className="text-sm text-gray-600">Review and manage student scholarship applications submitted by schools</p>
+              <p className="text-sm text-gray-600">View student scholarship applications submitted by schools (read-only)</p>
               <p className="text-xs text-gray-500 mt-1">
-                Note: For school voucher requests, please visit the <a href="/admin/voucher-requests" className="text-indigo-600 hover:underline">Voucher Requests</a> page
+                Note: To approve/reject applications or manage voucher requests, please visit the <a href="/admin/voucher-requests" className="text-indigo-600 hover:underline font-medium">Requests & Applications</a> page
               </p>
             </div>
             <button
