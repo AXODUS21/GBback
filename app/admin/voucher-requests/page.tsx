@@ -62,7 +62,7 @@ export default function ScholarshipRequestsPage() {
     try {
       const { data, error } = await supabase
         .from("scholarship_applications")
-        .select("*")
+        .select("*, school_user_id")
         .order("applied_date", { ascending: false })
 
       if (error) throw error
@@ -127,12 +127,14 @@ export default function ScholarshipRequestsPage() {
         updateData.voucher_code = voucherCode
 
         // Create voucher record in vouchers table
+        // Use school_user_id if available, otherwise school_id
+        const schoolId = (application as any).school_user_id || application.school_id
         const { error: voucherError } = await supabase
           .from("vouchers")
           .insert([
             {
               voucher_code: voucherCode,
-              school_id: application.school_id,
+              school_id: schoolId,
               amount: application.voucher_amount,
               purpose: application.program_type,
               status: "active",
@@ -166,12 +168,14 @@ export default function ScholarshipRequestsPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              to: application.email,
+              to: application.email, // This is now the school's email from their account
+              type: "voucher_approved",
               studentName: application.student_name,
               status: "approved",
               schoolName: application.school_name,
               programType: application.program_type,
               voucherCode: voucherCode,
+              amount: application.voucher_amount,
             }),
           })
 

@@ -100,11 +100,12 @@ export default function ApplyPage() {
       }
 
       setSchoolProfile(schoolData)
-      // Pre-fill school name and district from profile
+      // Pre-fill school name, district, and email from profile
       setFormData(prev => ({
         ...prev,
         schoolName: schoolData.school_name || "",
         district: schoolData.school_district || "",
+        email: user.email || "", // Use the school account's email
       }))
     } catch (error: any) {
       console.error("Error checking auth:", error)
@@ -131,12 +132,15 @@ export default function ApplyPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
+      // Always use the logged-in user's email to ensure it's linked to the school account
+      const schoolEmail = user.email || formData.email
+
       const { data, error } = await supabase
         .from("scholarship_applications")
         .insert([
           {
             student_name: formData.studentName,
-            email: formData.email,
+            email: schoolEmail, // Use school account email
             phone: formData.phone || null,
             school_name: formData.schoolName,
             district: formData.district || null,
@@ -149,7 +153,8 @@ export default function ApplyPage() {
             country: formData.country,
             status: "pending",
             submitted_by: user.id,
-            school_user_id: user.id,
+            school_user_id: user.id, // Link to school account
+            school_id: user.id, // Also set school_id for consistency
           },
         ])
         .select()
@@ -332,7 +337,7 @@ export default function ApplyPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="email">
-                        Student Email Address <span className="text-red-500">*</span>
+                        School Email Address <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="email"
@@ -341,8 +346,13 @@ export default function ApplyPage() {
                         value={formData.email}
                         onChange={handleChange}
                         required
-                        placeholder="student@email.com"
+                        placeholder="school@email.com"
+                        readOnly
+                        className="bg-gray-100"
                       />
+                      <p className="text-xs text-gray-500">
+                        This email is linked to your school account and will be used for all communications.
+                      </p>
                     </div>
                   </div>
 

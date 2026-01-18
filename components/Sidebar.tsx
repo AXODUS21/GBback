@@ -76,6 +76,11 @@ export default function Sidebar() {
       label: "Apply for Scholarship",
       icon: FileText,
     },
+    {
+      path: "/my-applications",
+      label: "My Applications",
+      icon: Ticket,
+    },
   ];
 
   // Default to admin navigation items while role is loading to prevent flash
