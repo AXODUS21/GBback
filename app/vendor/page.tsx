@@ -147,14 +147,45 @@ export default function VendorDashboard() {
       let verificationStatus: "valid" | "invalid" | "not_found" = "not_found"
       let voucherApplicationId: string | null = null
 
-      // First, check vouchers table (where active vouchers are stored)
-      const { data: voucherRecord, error: voucherError } = await supabase
+      // First, try exact match (case-sensitive)
+      let { data: voucherRecord, error: voucherError } = await supabase
         .from("vouchers")
         .select("id, voucher_code, school_id, amount, purpose, status")
         .eq("voucher_code", normalizedCode)
         .maybeSingle()
 
-      console.log("Voucher record check:", { voucherRecord, voucherError })
+      console.log("Voucher record check (exact match):", { voucherRecord, voucherError })
+
+      // If not found, try case-insensitive match using ilike
+      if (!voucherRecord && !voucherError) {
+        console.log("Trying case-insensitive search...")
+        const { data: voucherRecordCaseInsensitive, error: voucherErrorCI } = await supabase
+          .from("vouchers")
+          .select("id, voucher_code, school_id, amount, purpose, status")
+          .ilike("voucher_code", normalizedCode)
+          .maybeSingle()
+        
+        console.log("Voucher record check (case-insensitive):", { voucherRecordCaseInsensitive, voucherErrorCI })
+        
+        if (voucherRecordCaseInsensitive) {
+          voucherRecord = voucherRecordCaseInsensitive
+          voucherError = voucherErrorCI
+        }
+      }
+
+      // Debug: Check what voucher codes exist in the database (first 10)
+      const { data: allVouchers, error: allVouchersError } = await supabase
+        .from("vouchers")
+        .select("voucher_code, status")
+        .limit(10)
+      console.log("Sample vouchers in database:", allVouchers, "Error:", allVouchersError)
+      
+      // Also check if the exact code exists (for debugging)
+      const { data: exactMatch, error: exactMatchError } = await supabase
+        .from("vouchers")
+        .select("voucher_code, status")
+        .eq("voucher_code", normalizedCode)
+      console.log("Exact match query result:", exactMatch, "Error:", exactMatchError)
 
       if (voucherError) {
         console.error("Error querying vouchers table:", voucherError)
@@ -189,13 +220,39 @@ export default function VendorDashboard() {
         }
       } else if (!voucherRecord) {
         // If not found in vouchers table, check scholarship_applications as fallback
-        const { data: scholarshipApp, error: scholarshipError } = await supabase
+        // Try exact match first
+        let { data: scholarshipApp, error: scholarshipError } = await supabase
           .from("scholarship_applications")
           .select("id, voucher_code, student_name, school_name, voucher_amount, status")
           .eq("voucher_code", normalizedCode)
           .maybeSingle()
 
-        console.log("Scholarship application check:", { scholarshipApp, scholarshipError })
+        console.log("Scholarship application check (exact match):", { scholarshipApp, scholarshipError })
+
+        // If not found, try case-insensitive match
+        if (!scholarshipApp && !scholarshipError) {
+          console.log("Trying case-insensitive search in scholarship_applications...")
+          const { data: scholarshipAppCI, error: scholarshipErrorCI } = await supabase
+            .from("scholarship_applications")
+            .select("id, voucher_code, student_name, school_name, voucher_amount, status")
+            .ilike("voucher_code", normalizedCode)
+            .maybeSingle()
+          
+          console.log("Scholarship application check (case-insensitive):", { scholarshipAppCI, scholarshipErrorCI })
+          
+          if (scholarshipAppCI) {
+            scholarshipApp = scholarshipAppCI
+            scholarshipError = scholarshipErrorCI
+          }
+        }
+
+        // Debug: Check what voucher codes exist in scholarship_applications
+        const { data: allApplications } = await supabase
+          .from("scholarship_applications")
+          .select("voucher_code, status")
+          .not("voucher_code", "is", null)
+          .limit(10)
+        console.log("Sample applications with voucher codes:", allApplications)
 
         if (!scholarshipError && scholarshipApp) {
           // Check if voucher is approved
@@ -207,16 +264,46 @@ export default function VendorDashboard() {
             voucherApplicationId = scholarshipApp.id
           }
         } else {
-          // Not found in either table
-          verificationStatus = "not_found"
-          console.error("Voucher code not found in either table:", normalizedCode)
-          if (voucherError) {
-            console.error("Voucher table error:", voucherError)
+          // Not found in either table - try one more time with a broader search
+          // Sometimes there might be whitespace or formatting differences
+          const codeWithoutDashes = normalizedCode.replace(/-/g, "")
+          console.log("Trying search without dashes:", codeWithoutDashes)
+          
+          // Try searching for vouchers that contain the code (in case of formatting differences)
+          const { data: partialMatch } = await supabase
+            .from("vouchers")
+            .select("id, voucher_code, status")
+            .ilike("voucher_code", `%${codeWithoutDashes}%`)
+            .maybeSingle()
+          
+          if (partialMatch) {
+            console.log("Found partial match:", partialMatch)
+            // If we found a partial match, use it but warn the user
+            if (partialMatch.status === "active") {
+              verificationStatus = "valid"
+              voucherApplicationId = partialMatch.id
+              toast.success("Voucher code found (format may differ slightly). Submission sent to admin.")
+            } else {
+              verificationStatus = "invalid"
+              toast.error(`Voucher code found but not active (status: ${partialMatch.status})`)
+            }
+          } else {
+            // Not found in either table
+            verificationStatus = "not_found"
+            console.error("Voucher code not found in either table:", normalizedCode)
+            console.error("Searched for:", {
+              exact: normalizedCode,
+              caseInsensitive: normalizedCode,
+              withoutDashes: codeWithoutDashes
+            })
+            if (voucherError) {
+              console.error("Voucher table error:", voucherError)
+            }
+            if (scholarshipError) {
+              console.error("Scholarship application error:", scholarshipError)
+            }
+            toast.error("Voucher code not found in database. Please verify the code and try again.")
           }
-          if (scholarshipError) {
-            console.error("Scholarship application error:", scholarshipError)
-          }
-          toast.error("Voucher code not found in database. Please verify the code and try again.")
         }
       }
 
