@@ -139,27 +139,64 @@ export default function VendorDashboard() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
-      // Verify voucher code exists in scholarship_applications
-      const { data: voucherApp, error: voucherError } = await supabase
-        .from("scholarship_applications")
-        .select("id, voucher_code, student_name, school_name, voucher_amount, status")
-        .eq("voucher_code", voucherCode.trim().toUpperCase())
-        .maybeSingle()
+      // Normalize voucher code (uppercase, trim whitespace)
+      const normalizedCode = voucherCode.trim().toUpperCase()
 
+      // Verify voucher code exists - check both scholarship_applications and vouchers tables
       let verificationStatus: "valid" | "invalid" | "not_found" = "not_found"
       let voucherApplicationId: string | null = null
 
-      if (voucherError || !voucherApp) {
-        verificationStatus = "not_found"
-        toast.error("Voucher code not found in database")
-      } else {
+      // First, check scholarship_applications table (where voucher codes are stored when approved)
+      const { data: scholarshipApp, error: scholarshipError } = await supabase
+        .from("scholarship_applications")
+        .select("id, voucher_code, student_name, school_name, voucher_amount, status")
+        .eq("voucher_code", normalizedCode)
+        .maybeSingle()
+
+      if (!scholarshipError && scholarshipApp) {
         // Check if voucher is approved
-        if (voucherApp.status !== "approved") {
+        if (scholarshipApp.status !== "approved") {
           verificationStatus = "invalid"
           toast.error("This voucher code is not approved yet")
         } else {
           verificationStatus = "valid"
-          voucherApplicationId = voucherApp.id
+          voucherApplicationId = scholarshipApp.id
+        }
+      } else {
+        // If not found in scholarship_applications, check vouchers table as fallback
+        const { data: voucherRecord, error: voucherError } = await supabase
+          .from("vouchers")
+          .select("id, voucher_code, school_id, amount, purpose, status")
+          .eq("voucher_code", normalizedCode)
+          .maybeSingle()
+
+        if (!voucherError && voucherRecord) {
+          // Voucher exists in vouchers table
+          if (voucherRecord.status !== "active") {
+            verificationStatus = "invalid"
+            toast.error("This voucher code is not active")
+          } else {
+            verificationStatus = "valid"
+            // Try to find the corresponding scholarship application by voucher_code
+            const { data: relatedApp } = await supabase
+              .from("scholarship_applications")
+              .select("id")
+              .eq("voucher_code", normalizedCode)
+              .eq("status", "approved")
+              .maybeSingle()
+            
+            if (relatedApp) {
+              voucherApplicationId = relatedApp.id
+            } else {
+              // If no scholarship application found, use voucher record ID as fallback
+              // This handles edge cases where voucher exists but application link is missing
+              voucherApplicationId = voucherRecord.id
+            }
+          }
+        } else {
+          // Not found in either table
+          verificationStatus = "not_found"
+          toast.error("Voucher code not found in database. Please verify the code and try again.")
         }
       }
 

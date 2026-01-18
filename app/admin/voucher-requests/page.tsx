@@ -29,7 +29,7 @@ type ScholarshipApplication = {
   applied_date: string
   reviewed_at: string | null
   notes: string | null
-  school_id: string
+  school_user_id: string
 }
 
 export default function ScholarshipRequestsPage() {
@@ -124,16 +124,21 @@ export default function ScholarshipRequestsPage() {
       }
 
       if (voucherCode) {
-        updateData.voucher_code = voucherCode
+        updateData.voucher_code = voucherCode.toUpperCase() // Ensure uppercase consistency
 
         // Create voucher record in vouchers table
-        // Use school_user_id if available, otherwise school_id
-        const schoolId = (application as any).school_user_id || application.school_id
+        // Use school_user_id from the application
+        const schoolId = (application as any).school_user_id
+        if (!schoolId) {
+          console.error("No school_user_id found in application")
+          throw new Error("Cannot create voucher: school user ID not found")
+        }
+        
         const { error: voucherError } = await supabase
           .from("vouchers")
           .insert([
             {
-              voucher_code: voucherCode,
+              voucher_code: voucherCode.toUpperCase(), // Ensure uppercase
               school_id: schoolId,
               amount: application.voucher_amount,
               purpose: application.program_type,

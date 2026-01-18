@@ -154,7 +154,6 @@ export default function ApplyPage() {
             status: "pending",
             submitted_by: user.id,
             school_user_id: user.id, // Link to school account
-            school_id: user.id, // Also set school_id for consistency
           },
         ])
         .select()
