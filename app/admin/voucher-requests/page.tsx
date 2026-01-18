@@ -94,9 +94,9 @@ export default function ScholarshipRequestsPage() {
       const application = scholarshipApplications.find(a => a.id === applicationId)
       if (!application) throw new Error("Application not found")
 
-      // Generate unique voucher code if approving and has voucher amount
+      // Generate unique voucher code if approving (even if voucher_amount is null/0)
       let voucherCode: string | null = null
-      if (newStatus === "approved" && application.voucher_amount) {
+      if (newStatus === "approved") {
         let attempts = 0
         const maxAttempts = 10
 
@@ -149,7 +149,10 @@ export default function ScholarshipRequestsPage() {
 
         if (voucherError) {
           console.error("Error creating voucher record:", voucherError)
-          // Don't fail the whole operation if voucher creation fails
+          toast.error(`Warning: Voucher code created but failed to save to vouchers table: ${voucherError.message}`)
+          // Don't fail the whole operation if voucher creation fails - voucher_code is still saved in scholarship_applications
+        } else {
+          console.log("Voucher record created successfully:", voucherCode)
         }
       }
 
