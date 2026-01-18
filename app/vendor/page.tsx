@@ -134,80 +134,67 @@ export default function VendorDashboard() {
       const normalizedCode = voucherCode.trim().toUpperCase()
       console.log("Verifying voucher code:", normalizedCode)
 
-      // Verify voucher code exists - check scholarship_applications first (vendors have RLS access here)
+      // Use API endpoint to verify voucher (bypasses RLS restrictions)
       let verificationStatus: "valid" | "invalid" | "not_found" = "not_found"
       let voucherApplicationId: string | null = null
 
-      // Check scholarship_applications first (this is where voucher codes are stored when approved)
-      const { data: scholarshipApps, error: scholarshipError } = await supabase
-        .from("scholarship_applications")
-        .select("id, voucher_code, student_name, school_name, voucher_amount, status")
-        .eq("voucher_code", normalizedCode)
-
-      console.log("Scholarship application check:", { 
-        scholarshipApps, 
-        scholarshipError, 
-        count: scholarshipApps?.length,
-        codes: scholarshipApps?.map(a => ({ code: a.voucher_code, status: a.status }))
-      })
-
-      // Find approved application
-      const approvedApp = scholarshipApps?.find(app => app.status === "approved") || null
-      
-      if (approvedApp) {
-        console.log("Found approved scholarship application:", approvedApp)
-        verificationStatus = "valid"
-        voucherApplicationId = approvedApp.id
-      } else if (scholarshipApps && scholarshipApps.length > 0) {
-        // Found but not approved
-        const app = scholarshipApps[0]
-        verificationStatus = "invalid"
-        console.log("Found application but not approved:", app.status)
-        toast.error(`This voucher code is not approved yet (status: ${app.status})`)
-      } else if (scholarshipError) {
-        console.error("Error querying scholarship_applications:", scholarshipError)
-        toast.error("Error verifying voucher code. Please try again.")
-      } else {
-        // Not found in scholarship_applications - try vouchers table as fallback
-        console.log("Not found in scholarship_applications, trying vouchers table...")
-        const { data: voucherRecords, error: voucherError } = await supabase
-          .from("vouchers")
-          .select("id, voucher_code, school_id, amount, purpose, status")
-          .eq("voucher_code", normalizedCode)
-
-        console.log("Voucher record check:", { 
-          voucherRecords, 
-          voucherError, 
-          count: voucherRecords?.length
+      try {
+        const response = await fetch("/api/verify-voucher", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ voucherCode: normalizedCode }),
         })
 
-        if (!voucherError && voucherRecords && voucherRecords.length > 0) {
-          const voucherRecord = voucherRecords[0]
-          if (voucherRecord.status === "active") {
-            verificationStatus = "valid"
-            // Try to find the corresponding scholarship application
-            const { data: relatedApp } = await supabase
-              .from("scholarship_applications")
-              .select("id")
-              .eq("voucher_code", normalizedCode)
-              .eq("status", "approved")
-              .maybeSingle()
-            
-            voucherApplicationId = relatedApp?.id || voucherRecord.id
-            console.log("Found active voucher in vouchers table:", voucherRecord)
-          } else {
-            verificationStatus = "invalid"
-            toast.error(`This voucher code is not active (status: ${voucherRecord.status})`)
-          }
-        } else {
-          // Not found in either table
-          verificationStatus = "not_found"
-          console.error("Voucher code not found in either table:", normalizedCode)
-          if (voucherError) {
-            console.error("Voucher table error:", voucherError)
-          }
-          toast.error("Voucher code not found in database. Please verify the code and try again.")
+        console.log("API response status:", response.status, response.statusText)
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
+          console.error("API error response:", errorData)
+          throw new Error(errorData.error || `API error: ${response.status}`)
         }
+
+        const result = await response.json()
+        console.log("Voucher verification API response:", result)
+        console.log("API diagnostics:", result.diagnostics)
+
+        if (result.valid === true) {
+          verificationStatus = "valid"
+          voucherApplicationId = result.applicationId
+          console.log("Voucher verified successfully:", result)
+        } else {
+          verificationStatus = result.status === "pending" ? "invalid" : "not_found"
+          console.log("Voucher verification failed:", result.reason, "Status:", result.status)
+          
+          // Show diagnostic info if available
+          if (result.diagnostics) {
+            console.error("Diagnostics:", {
+              usingServiceRole: result.diagnostics.usingServiceRole,
+              sampleCodes: result.diagnostics.sampleVoucherCodes,
+              partialMatches: result.diagnostics.partialMatchVouchers || result.diagnostics.partialMatchApps
+            })
+            
+            if (!result.diagnostics.usingServiceRole) {
+              toast.error("Service role key not configured. Voucher verification may be blocked by RLS.")
+            } else if (result.diagnostics.sampleVoucherCodes && result.diagnostics.sampleVoucherCodes.length > 0) {
+              console.error("Sample codes in DB:", result.diagnostics.sampleVoucherCodes)
+              toast.error(`${result.reason}. Check console for diagnostic info.`)
+            } else {
+              toast.error(result.reason || "Voucher code verification failed")
+            }
+          } else {
+            toast.error(result.reason || "Voucher code verification failed")
+          }
+        }
+      } catch (apiError: any) {
+        console.error("Error calling verify-voucher API:", apiError)
+        console.error("Error details:", {
+          message: apiError.message,
+          stack: apiError.stack
+        })
+        toast.error(apiError.message || "Error verifying voucher code. Please try again.")
+        verificationStatus = "not_found"
       }
 
       console.log("Final verification result:", { verificationStatus, voucherApplicationId })
