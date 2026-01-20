@@ -39,12 +39,50 @@ export default function VendorDashboard() {
   const checkAuthAndLoad = async () => {
     try {
       setIsLoading(true)
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        router.push("/auth/login")
+      
+      // Add retry logic for session check (handles race conditions after login)
+      let session = null
+      let user = null
+      let retries = 0
+      const maxRetries = 5
+      
+      while (retries < maxRetries) {
+        const { data: { session: checkSession }, error: sessionError } = await supabase.auth.getSession()
+        if (checkSession && !sessionError) {
+          session = checkSession
+          break
+        }
+        if (retries < maxRetries - 1) {
+          console.log(`Session not ready, retrying... (${retries + 1}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, 200))
+        }
+        retries++
+      }
+      
+      if (!session) {
+        console.error("No session in vendor dashboard after retries")
+        router.replace("/auth/login")
         return
       }
+
+      // Get user from session
+      const { data: { user: fetchedUser }, error: userError } = await supabase.auth.getUser()
+
+      if (userError) {
+        console.error("Error getting user in vendor dashboard:", userError)
+        router.replace("/auth/login")
+        return
+      }
+
+      if (!fetchedUser) {
+        console.log("No user found, redirecting to login")
+        router.replace("/auth/login")
+        return
+      }
+      
+      user = fetchedUser
+
+      console.log("User authenticated in vendor dashboard:", user.id)
 
       const { data: profile, error: profileError } = await supabase
         .from("user_profiles")
@@ -52,9 +90,46 @@ export default function VendorDashboard() {
         .eq("id", user.id)
         .maybeSingle()
 
-      if (profileError || !profile || profile?.role !== "vendor") {
+      if (profileError) {
+        console.error("Error loading user profile:", profileError)
+        // If it's an RLS error, don't redirect - might be temporary
+        if (profileError.code === "42501" || profileError.message?.includes("permission denied")) {
+          console.warn("RLS error loading profile, retrying...")
+          // Wait and retry once
+          await new Promise(resolve => setTimeout(resolve, 500))
+          const { data: retryProfile } = await supabase
+            .from("user_profiles")
+            .select("role")
+            .eq("id", user.id)
+            .maybeSingle()
+          if (!retryProfile || retryProfile.role !== "vendor") {
+            toast.error("Access Denied: You must be a vendor to view this page.")
+            router.replace("/auth/login")
+            return
+          }
+        } else {
+          toast.error("Access Denied: You must be a vendor to view this page.")
+          router.replace("/auth/login")
+          return
+        }
+      }
+
+      if (!profile || profile?.role !== "vendor") {
+        console.error("Wrong role for vendor dashboard:", profile?.role, "- redirecting")
+        // If user is a school, redirect to school dashboard instead
+        if (profile?.role === "school") {
+          console.log("User is school, redirecting to /school-dashboard")
+          router.replace("/school-dashboard")
+          return
+        }
+        // If user is admin, redirect to admin dashboard
+        if (profile?.role === "admin") {
+          console.log("User is admin, redirecting to /")
+          router.replace("/")
+          return
+        }
         toast.error("Access Denied: You must be a vendor to view this page.")
-        router.push("/auth/login")
+        router.replace("/auth/login")
         return
       }
 
@@ -65,8 +140,18 @@ export default function VendorDashboard() {
         .eq("id", user.id)
         .maybeSingle()
 
-      // If profile doesn't exist or error (not found), user is pending approval
-      if (vendorError || !vendorData) {
+      // If profile doesn't exist, user is pending approval (this is normal)
+      // Only treat it as an error if there's an actual database error (not "not found")
+      if (vendorError) {
+        // PGRST116 is "no rows returned" - this is expected for pending vendors
+        if (vendorError.code !== "PGRST116") {
+          console.error("Error loading vendor profile:", vendorError)
+          // Continue anyway - might be RLS issue, but user should still see pending status
+        }
+      }
+
+      // If profile doesn't exist, user is pending approval
+      if (!vendorData) {
         // Check signup status
         const { data: signupData } = await supabase
           .from("vendor_signups")
@@ -96,7 +181,7 @@ export default function VendorDashboard() {
     } catch (error: any) {
       console.error("Error checking auth:", error)
       toast.error("Failed to load dashboard")
-      router.push("/auth/login")
+      router.replace("/auth/login")
     } finally {
       setIsLoading(false)
     }

@@ -81,12 +81,45 @@ export default function SchoolDashboard() {
     const checkAuthAndLoad = async () => {
       try {
         setIsLoading(true)
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-        if (userError || !user) {
-          router.push("/auth/login")
+        
+        // Add a small delay if we just navigated here (helps with session persistence)
+        // Check if session exists, retry a few times if not (handles race conditions)
+        let session = null
+        let user = null
+        let retries = 0
+        const maxRetries = 5
+        
+        while (retries < maxRetries) {
+          const { data: { session: checkSession }, error: sessionError } = await supabase.auth.getSession()
+          if (checkSession && !sessionError) {
+            session = checkSession
+            break
+          }
+          if (retries < maxRetries - 1) {
+            console.log(`Session not ready, retrying... (${retries + 1}/${maxRetries})`)
+            await new Promise(resolve => setTimeout(resolve, 200))
+          }
+          retries++
+        }
+        
+        if (!session) {
+          console.error("No session in school dashboard after retries")
+          router.replace("/auth/login")
           return
         }
+
+        // Get user from session
+        const { data: { user: fetchedUser }, error: userError } = await supabase.auth.getUser()
+
+        if (userError || !fetchedUser) {
+          console.error("Error getting user in school dashboard:", userError)
+          router.replace("/auth/login")
+          return
+        }
+        
+        user = fetchedUser
+
+        console.log("School dashboard - User authenticated:", user.id)
 
         const { data: profile, error: profileError } = await supabase
           .from("user_profiles")
@@ -94,30 +127,126 @@ export default function SchoolDashboard() {
           .eq("id", user.id)
           .maybeSingle()
 
-        if (profileError || profile?.role !== "school") {
-          toast.error("Access Denied: You must be a school to view this page.")
-          router.push("/auth/login")
+        // Handle profile errors and ensure we have a valid profile before proceeding
+        let finalProfile = profile
+        if (profileError) {
+          console.error("Error loading user profile:", profileError)
+          // If it's an RLS error, try once more
+          if (profileError.code === "42501" || profileError.message?.includes("permission denied")) {
+            console.warn("RLS error loading profile, retrying...")
+            await new Promise(resolve => setTimeout(resolve, 500))
+            const { data: retryProfile } = await supabase
+              .from("user_profiles")
+              .select("role")
+              .eq("id", user.id)
+              .maybeSingle()
+            if (!retryProfile) {
+              toast.error("Access Denied: Could not verify user role.")
+              router.replace("/auth/login")
+              return
+            }
+            finalProfile = retryProfile
+          } else {
+            toast.error("Access Denied: Could not verify user role.")
+            router.replace("/auth/login")
+            return
+          }
+        }
+
+        // CRITICAL: Check role IMMEDIATELY and redirect if not a school
+        // This must happen before ANY other checks to prevent errors
+        if (!finalProfile) {
+          console.error("No profile found - redirecting to login")
+          toast.error("Access Denied: User profile not found.")
+          router.replace("/auth/login")
           return
         }
 
-        // Load school profile
+        const userRole = finalProfile.role
+        console.log("🔍 School dashboard - User role detected:", userRole, "User ID:", user.id)
+
+        // Immediate role check - redirect BEFORE any school-specific logic
+        if (userRole !== "school") {
+          console.error("⚠️ WRONG ROLE for school dashboard:", userRole, "- Redirecting immediately")
+          // Use window.location for immediate hard redirect
+          if (userRole === "vendor") {
+            console.log("🚨 VENDOR detected on school dashboard - redirecting to /vendor")
+            window.location.href = "/vendor"
+            return
+          }
+          if (userRole === "admin") {
+            console.log("🚨 ADMIN detected on school dashboard - redirecting to /")
+            window.location.href = "/"
+            return
+          }
+          toast.error("Access Denied: You must be a school to view this page.")
+          router.replace("/auth/login")
+          return
+        }
+
+        // Only proceed if we've confirmed the user is a school
+        console.log("✓ Confirmed user is a school, proceeding with school dashboard")
+
+        // Load school profile (may not exist if pending approval)
         const { data: schoolData, error: schoolError } = await supabase
           .from("school_profiles")
           .select("*")
           .eq("id", user.id)
           .maybeSingle()
 
-        if (schoolError || !schoolData) {
-          toast.error("School profile not found. Please contact support.")
-          router.push("/auth/login")
-          return
+        if (schoolError) {
+          console.error("Error loading school profile:", schoolError)
+          // PGRST116 is "no rows returned" - this is expected for pending schools
+          if (schoolError.code === "PGRST116") {
+            console.log("School profile not found - user is pending approval")
+            // Allow user to see pending status
+          } else if (schoolError.code === "42501" || schoolError.message?.includes("permission denied")) {
+            console.warn("RLS error loading school profile - user may be pending approval")
+            // Allow user to see pending status
+          } else {
+            console.error("Unexpected error loading school profile:", schoolError)
+            toast.error("Error loading school profile. Please contact support.")
+            router.replace("/auth/login")
+            return
+          }
+        }
+
+        // If no school data, user is pending approval - load signup status instead
+        if (!schoolData) {
+          console.log("School profile not found - checking signup status")
+          const { data: signupData } = await supabase
+            .from("school_signups")
+            .select("school_name, status, reviewed_at, review_notes")
+            .eq("user_id", user.id)
+            .maybeSingle()
+
+          if (signupData) {
+            // Set a placeholder profile for pending schools
+            setSchoolProfile({
+              id: user.id,
+              school_name: signupData.school_name || "Pending School",
+              email: user.email,
+              status: signupData.status || "pending",
+              isPending: true,
+            })
+            setSignupStatus(signupData)
+            if (!mounted) return
+            setIsLoading(false)
+            return // Exit early - pending approval
+          } else {
+            // No signup record either - this is an error
+            console.error("No school profile or signup record found")
+            toast.error("School profile not found. Please contact support.")
+            router.replace("/auth/login")
+            return
+          }
         }
 
         if (!mounted) return
 
         setSchoolProfile(schoolData)
 
-        // Load signup status
+        // Load signup status (only if we have schoolData)
         const { data: signupData } = await supabase
           .from("school_signups")
           .select("status, reviewed_at, review_notes")
@@ -134,7 +263,7 @@ export default function SchoolDashboard() {
       } catch (error: any) {
         console.error("Error checking auth:", error)
         toast.error("Failed to load dashboard")
-        router.push("/auth/login")
+        router.replace("/auth/login")
       } finally {
         if (mounted) {
           setIsLoading(false)

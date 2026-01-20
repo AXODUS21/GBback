@@ -40,34 +40,177 @@ export default function LoginPage() {
         .eq("id", data.user.id)
         .single()
 
-      if (profileError) throw profileError
+      if (profileError) {
+        console.error("Profile error:", profileError)
+        throw profileError
+      }
 
+      if (!profile) {
+        console.error("No profile found for user:", data.user.id)
+        throw new Error("User profile not found. Please contact support.")
+      }
+
+      // If role is NULL, try to determine it from vendor_signups or school_signups
+      let finalRole = profile.role
+      if (!profile.role || profile.role === null) {
+        console.warn("Role is NULL, attempting to determine from signup records")
+        
+        // Check if user is a vendor
+        const { data: vendorSignup } = await supabase
+          .from("vendor_signups")
+          .select("id")
+          .eq("user_id", data.user.id)
+          .maybeSingle()
+        
+        if (vendorSignup) {
+          // Update profile to vendor
+          const { error: updateError } = await supabase
+            .from("user_profiles")
+            .update({ role: "vendor" })
+            .eq("id", data.user.id)
+          
+          if (!updateError) {
+            finalRole = "vendor"
+            console.log("Fixed NULL role - set to vendor")
+          }
+        } else {
+          // Check if user is a school
+          const { data: schoolSignup } = await supabase
+            .from("school_signups")
+            .select("id")
+            .eq("user_id", data.user.id)
+            .maybeSingle()
+          
+          if (schoolSignup) {
+            // Update profile to school
+            const { error: updateError } = await supabase
+              .from("user_profiles")
+              .update({ role: "school" })
+              .eq("id", data.user.id)
+            
+            if (!updateError) {
+              finalRole = "school"
+              console.log("Fixed NULL role - set to school")
+            }
+          }
+        }
+        
+        if (!finalRole) {
+          throw new Error("Unable to determine user role. Please contact support.")
+        }
+      }
+
+      console.log("User profile loaded:", { userId: data.user.id, role: finalRole, profileId: profile.id })
+
+      // Use finalRole instead of profile.role for checks
       // Check if vendor is suspended (still allow login but will be blocked in dashboard)
-      if (profile.role === "vendor") {
-        const { data: vendorProfile } = await supabase
+      if (finalRole === "vendor") {
+        const { data: vendorProfile, error: vendorProfileError } = await supabase
           .from("vendor_profiles")
           .select("id, status")
           .eq("id", data.user.id)
-          .single()
+          .maybeSingle()
 
+        // If there's an error other than "not found", log it but continue
+        // (vendor profile may not exist if pending approval)
+        if (vendorProfileError && vendorProfileError.code !== "PGRST116") {
+          console.warn("Error checking vendor profile:", vendorProfileError)
+          // Continue with login - vendor profile check will happen in dashboard
+        }
+
+        // Only check suspension if profile exists
         if (vendorProfile && vendorProfile.status === "suspended") {
           await supabase.auth.signOut()
           throw new Error("Your vendor account has been suspended. Please contact support.")
+        }
+        // If vendorProfile is null, vendor is pending approval - allow login
+      }
+
+      // Verify session is established before redirecting
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) {
+        console.error("Session error after login:", sessionError)
+        throw new Error("Failed to establish session. Please try again.")
+      }
+      if (!session) {
+        console.error("No session after login")
+        throw new Error("Session not established. Please try again.")
+      }
+
+      // Determine redirect path with explicit logging - use finalRole
+      let redirectPath = "/"
+      if (finalRole === "admin") {
+        redirectPath = "/"
+      } else if (finalRole === "school") {
+        redirectPath = "/school-dashboard"
+      } else if (finalRole === "vendor") {
+        redirectPath = "/vendor"
+      } else {
+        console.warn("Unknown role:", finalRole, "- defaulting to /")
+        redirectPath = "/"
+      }
+      
+      console.log("Login successful - Redirect info:", {
+        role: finalRole,
+        redirectPath: redirectPath,
+        userId: data.user.id,
+        originalRole: profile.role
+      })
+      
+      // Wait for session to be fully persisted
+      // Retry multiple times to ensure session is established
+      let sessionPersisted = false
+      for (let i = 0; i < 10; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+        const { data: { session: checkSession }, error: sessionCheckError } = await supabase.auth.getSession()
+        if (checkSession && checkSession.access_token && !sessionCheckError) {
+          // Verify user can be retrieved
+          const { data: { user: verifyUser } } = await supabase.auth.getUser()
+          if (verifyUser && verifyUser.id === data.user.id) {
+            sessionPersisted = true
+            console.log("Session verified and persisted")
+            break
+          }
+        }
+      }
+      
+      if (!sessionPersisted) {
+        console.error("Session not persisted after login!")
+        throw new Error("Session not established. Please try again.")
+      }
+      
+      // CRITICAL: Double-check role before redirecting to ensure we're going to the right place
+      const { data: { user: finalUserCheck } } = await supabase.auth.getUser()
+      if (finalUserCheck) {
+        const { data: finalProfile } = await supabase
+          .from("user_profiles")
+          .select("role")
+          .eq("id", finalUserCheck.id)
+          .maybeSingle()
+        
+        if (finalProfile && finalProfile.role && finalProfile.role !== finalRole) {
+          console.warn("Role mismatch detected! Original:", finalRole, "Final:", finalProfile.role)
+          // Recalculate redirect path based on final profile
+          if (finalProfile.role === "admin") {
+            redirectPath = "/"
+          } else if (finalProfile.role === "school") {
+            redirectPath = "/school-dashboard"
+          } else if (finalProfile.role === "vendor") {
+            redirectPath = "/vendor"
+          }
+          finalRole = finalProfile.role
+          console.log("Updated redirect path to:", redirectPath, "Role:", finalRole)
         }
       }
 
       toast.success("Login successful!")
       
-      // Redirect based on role
-      if (profile.role === "admin") {
-        router.push("/")
-      } else if (profile.role === "school") {
-        router.push("/school-dashboard")
-      } else if (profile.role === "vendor") {
-        router.push("/vendor")
-      } else {
-        router.push("/")
-      }
+      console.log("FINAL redirect - Role:", profile.role, "Path:", redirectPath)
+      
+      // Use window.location.assign instead of href for better control
+      // This ensures a full page reload and session availability
+      await new Promise(resolve => setTimeout(resolve, 500))
+      window.location.assign(redirectPath)
     } catch (error: any) {
       console.error("Login error:", error)
       setError(error.message || "Invalid email or password")
