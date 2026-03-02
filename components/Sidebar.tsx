@@ -83,8 +83,22 @@ export default function Sidebar() {
     },
   ];
 
+  const vendorNavigationItems = [
+    {
+      path: "/vendor",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+    },
+  ];
+
   // Default to admin navigation items while role is loading to prevent flash
-  const navigationItems = userRole === null || userRole === "admin" ? adminNavigationItems : schoolNavigationItems;
+  const getNavigationItems = () => {
+    if (userRole === "admin" || userRole === null) return adminNavigationItems;
+    if (userRole === "vendor") return vendorNavigationItems;
+    return schoolNavigationItems;
+  };
+
+  const navigationItems = getNavigationItems();
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -118,7 +132,11 @@ export default function Sidebar() {
           {/* Logo */}
           <div className="p-6 border-b border-gray-200">
             <h1 className="text-2xl font-bold text-gray-900">
-              {userRole === null ? "Admin Dashboard" : userRole === "admin" ? "Admin Dashboard" : "School Portal"}
+              {userRole === null || userRole === "admin" 
+                ? "Admin Dashboard" 
+                : userRole === "vendor" 
+                ? "Vendor Portal" 
+                : "School Portal"}
             </h1>
             <p className="text-xs text-gray-500 mt-1">Global Bright Futures</p>
           </div>
