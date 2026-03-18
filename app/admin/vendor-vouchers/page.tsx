@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import Sidebar from "@/components/Sidebar"
 import Header from "@/components/Header"
-import { Loader2, CheckCircle, XCircle, Ticket, Package, AlertCircle } from "lucide-react"
+import { Loader2, CheckCircle, XCircle, Ticket, Package, AlertCircle, CreditCard } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 type VendorVoucherSubmission = {
@@ -24,6 +24,11 @@ type VendorVoucherSubmission = {
   student_name?: string
   school_name?: string
   voucher_amount?: number | null
+  bank_name?: string | null
+  account_name?: string | null
+  account_number?: string | null
+  bank_code?: string | null
+  payment_notes?: string | null
 }
 
 export default function VendorVouchersPage() {
@@ -79,10 +84,17 @@ export default function VendorVouchersPage() {
           if (item.vendor_id) {
             const { data: vendorData } = await supabase
               .from("vendor_profiles")
-              .select("vendor_name")
+              .select("vendor_name, bank_name, account_name, account_number, bank_code, payment_notes")
               .eq("id", item.vendor_id)
               .single()
-            if (vendorData) vendorName = vendorData.vendor_name
+            if (vendorData) {
+              vendorName = vendorData.vendor_name
+              item.bank_name = vendorData.bank_name
+              item.account_name = vendorData.account_name
+              item.account_number = vendorData.account_number
+              item.bank_code = vendorData.bank_code
+              item.payment_notes = vendorData.payment_notes
+            }
           }
 
           // Get application details if voucher_application_id exists
@@ -298,6 +310,49 @@ export default function VendorVouchersPage() {
                             </div>
                           )}
                         </div>
+
+                        {/* Payment Details Section */}
+                        {(submission.bank_name || submission.account_number || submission.payment_notes) && (
+                          <div className="mt-4 pt-4 border-t border-gray-100 bg-blue-50/50 rounded-lg p-3">
+                            <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1">
+                              <CreditCard className="h-3 w-3" />
+                              Vendor Payment Details
+                            </h4>
+                            <div className="grid md:grid-cols-2 gap-3 text-sm">
+                              {submission.bank_name && (
+                                <div>
+                                  <p className="text-gray-500 text-xs">Bank Name</p>
+                                  <p className="font-medium text-gray-900">{submission.bank_name}</p>
+                                </div>
+                              )}
+                              {submission.account_name && (
+                                <div>
+                                  <p className="text-gray-500 text-xs">Account Name</p>
+                                  <p className="font-medium text-gray-900">{submission.account_name}</p>
+                                </div>
+                              )}
+                              {submission.account_number && (
+                                <div>
+                                  <p className="text-gray-500 text-xs">Account Number</p>
+                                  <p className="font-mono font-medium text-gray-900">{submission.account_number}</p>
+                                </div>
+                              )}
+                              {submission.bank_code && (
+                                <div>
+                                  <p className="text-gray-500 text-xs">Bank/Sort Code</p>
+                                  <p className="font-medium text-gray-900">{submission.bank_code}</p>
+                                </div>
+                              )}
+                              {submission.payment_notes && (
+                                <div className="md:col-span-2">
+                                  <p className="text-gray-500 text-xs">Payment Notes</p>
+                                  <p className="text-gray-700 italic">{submission.payment_notes}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {submission.review_notes && (
                           <div className="mt-4 pt-4 border-t border-gray-200">
                             <p className="text-sm text-gray-600">

@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import Sidebar from "@/components/Sidebar"
 import Header from "@/components/Header"
-import { Loader2, CheckCircle, XCircle, Building2, Mail, Phone, MapPin, AlertTriangle } from "lucide-react"
+import { Loader2, CheckCircle, XCircle, Building2, Mail, Phone, MapPin, AlertTriangle, CreditCard } from "lucide-react"
 
 type VendorSignup = {
   id: string
@@ -23,6 +23,11 @@ type VendorSignup = {
   reviewed_by: string | null
   reviewed_at: string | null
   review_notes: string | null
+  bank_name: string | null
+  account_name: string | null
+  account_number: string | null
+  bank_code: string | null
+  payment_notes: string | null
   created_at: string
 }
 
@@ -77,7 +82,7 @@ export default function VendorSignupsPage() {
 
   const handleStatusChange = async (
     signupId: string,
-    newStatus: "under_review" | "approved" | "suspended",
+    newStatus: VendorSignup["status"],
     riskFlag?: boolean,
     notes?: string
   ) => {
@@ -136,6 +141,11 @@ export default function VendorSignupsPage() {
                 status: newStatus === "approved" ? "active" : newStatus,
                 risk_flag: riskFlag !== undefined ? riskFlag : signup.risk_flag,
                 notes: notes || signup.notes,
+                bank_name: signup.bank_name,
+                account_name: signup.account_name,
+                account_number: signup.account_number,
+                bank_code: signup.bank_code,
+                payment_notes: signup.payment_notes,
               },
             ])
 
@@ -153,6 +163,11 @@ export default function VendorSignupsPage() {
               status: newStatus === "approved" ? "active" : newStatus,
               risk_flag: riskFlag !== undefined ? riskFlag : signup.risk_flag,
               notes: notes || signup.notes,
+              bank_name: signup.bank_name,
+              account_name: signup.account_name,
+              account_number: signup.account_number,
+              bank_code: signup.bank_code,
+              payment_notes: signup.payment_notes,
             })
             .eq("id", signup.user_id)
 
@@ -234,8 +249,8 @@ export default function VendorSignupsPage() {
     )
   }
 
-  const filteredSignups = selectedStatus === "all" 
-    ? signups 
+  const filteredSignups = selectedStatus === "all"
+    ? signups
     : signups.filter(s => s.status === selectedStatus)
 
   const statusCounts = {
@@ -281,11 +296,10 @@ export default function VendorSignupsPage() {
               <div
                 key={status}
                 onClick={() => setSelectedStatus(status)}
-                className={`bg-white rounded-xl shadow-sm border-2 p-6 cursor-pointer transition ${
-                  selectedStatus === status
-                    ? "border-indigo-500"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
+                className={`bg-white rounded-xl shadow-sm border-2 p-6 cursor-pointer transition ${selectedStatus === status
+                  ? "border-indigo-500"
+                  : "border-gray-200 hover:border-gray-300"
+                  }`}
               >
                 <div className={`text-2xl font-bold ${selectedStatus === status ? "text-indigo-600" : "text-gray-900"}`}>
                   {count}
@@ -357,6 +371,49 @@ export default function VendorSignupsPage() {
                           <p className="font-medium text-gray-900">{signup.notes}</p>
                         </div>
                       )}
+
+                      {/* Payment Details Section */}
+                      {(signup.bank_name || signup.account_number || signup.payment_notes) && (
+                        <div className="md:col-span-3 mt-2 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                          <h4 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-1">
+                            <CreditCard className="h-3 w-3" />
+                            Registered Payment Details
+                          </h4>
+                          <div className="grid md:grid-cols-2 gap-3 text-sm">
+                            {signup.bank_name && (
+                              <div>
+                                <p className="text-gray-500 text-xs">Bank Name</p>
+                                <p className="font-medium text-gray-900">{signup.bank_name}</p>
+                              </div>
+                            )}
+                            {signup.account_name && (
+                              <div>
+                                <p className="text-gray-500 text-xs">Account Name</p>
+                                <p className="font-medium text-gray-900">{signup.account_name}</p>
+                              </div>
+                            )}
+                            {signup.account_number && (
+                              <div>
+                                <p className="text-gray-500 text-xs">Account Number</p>
+                                <p className="font-mono font-medium text-gray-900">{signup.account_number}</p>
+                              </div>
+                            )}
+                            {signup.bank_code && (
+                              <div>
+                                <p className="text-gray-500 text-xs">Bank/Sort Code</p>
+                                <p className="font-medium text-gray-900">{signup.bank_code}</p>
+                              </div>
+                            )}
+                            {signup.payment_notes && (
+                              <div className="md:col-span-2">
+                                <p className="text-gray-500 text-xs">Payment Notes</p>
+                                <p className="text-gray-700 italic">{signup.payment_notes}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {signup.review_notes && (
                         <div className="md:col-span-3">
                           <p className="text-gray-600">Review Notes</p>
@@ -500,11 +557,10 @@ export default function VendorSignupsPage() {
                           handleStatusChange(signup.id, signup.status, newRiskFlag, signup.notes || undefined)
                         }}
                         disabled={isUpdating === signup.id}
-                        className={`px-4 py-2 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
-                          signup.risk_flag
-                            ? "bg-gray-600 hover:bg-gray-700 text-white"
-                            : "bg-orange-600 hover:bg-orange-700 text-white"
-                        }`}
+                        className={`px-4 py-2 font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${signup.risk_flag
+                          ? "bg-gray-600 hover:bg-gray-700 text-white"
+                          : "bg-orange-600 hover:bg-orange-700 text-white"
+                          }`}
                       >
                         {signup.risk_flag ? "Remove Risk Flag" : "Add Risk Flag"}
                       </button>

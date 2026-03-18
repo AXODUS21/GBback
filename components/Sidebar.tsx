@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, LogOut, Menu, X, Ticket, School, FileText, Building2 } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu, X, Ticket, School, FileText, Building2, CreditCard } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export default function Sidebar() {
@@ -89,6 +89,11 @@ export default function Sidebar() {
       label: "Dashboard",
       icon: LayoutDashboard,
     },
+    {
+      path: "/vendor?tab=profile",
+      label: "Profile & Payment",
+      icon: CreditCard,
+    },
   ];
 
   // Default to admin navigation items while role is loading to prevent flash
@@ -124,19 +129,18 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-white text-gray-900 border-r border-gray-200 transform transition-transform duration-300 ease-in-out z-40 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:translate-x-0`}
+        className={`fixed top-0 left-0 h-full w-64 bg-white text-gray-900 border-r border-gray-200 transform transition-transform duration-300 ease-in-out z-40 ${isOpen ? "translate-x-0" : "-translate-x-full"
+          } lg:translate-x-0`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="p-6 border-b border-gray-200">
             <h1 className="text-2xl font-bold text-gray-900">
-              {userRole === null || userRole === "admin" 
-                ? "Admin Dashboard" 
-                : userRole === "vendor" 
-                ? "Vendor Portal" 
-                : "School Portal"}
+              {userRole === null || userRole === "admin"
+                ? "Admin Dashboard"
+                : userRole === "vendor"
+                  ? "Vendor Portal"
+                  : "School Portal"}
             </h1>
             <p className="text-xs text-gray-500 mt-1">Global Bright Futures</p>
           </div>
@@ -150,11 +154,10 @@ export default function Sidebar() {
                 <button
                   key={item.path}
                   onClick={() => handleNavigation(item.path)}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors w-full text-left ${
-                    active
-                      ? "bg-blue-50 text-blue-700 font-semibold"
-                      : "text-gray-700 hover:bg-gray-100"
-                  }`}
+                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors w-full text-left ${active
+                    ? "bg-blue-50 text-blue-700 font-semibold"
+                    : "text-gray-700 hover:bg-gray-100"
+                    }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span className="font-medium">{item.label}</span>

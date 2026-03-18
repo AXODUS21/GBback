@@ -20,6 +20,11 @@ export default function VendorSignupPage() {
     country: "",
     contactName: "",
     contactPhone: "",
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+    bankCode: "",
+    paymentNotes: "",
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -100,6 +105,11 @@ export default function VendorSignupPage() {
             country: formData.country,
             contact_name: formData.contactName,
             contact_phone: formData.contactPhone || null,
+            bank_name: formData.bankName || null,
+            account_name: formData.accountName || null,
+            account_number: formData.accountNumber || null,
+            bank_code: formData.bankCode || null,
+            payment_notes: formData.paymentNotes || null,
             status: "submitted",
             risk_flag: false,
           },
@@ -293,6 +303,90 @@ export default function VendorSignupPage() {
                   placeholder="Phone number"
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Payment Details (Optional)</h2>
+            <p className="text-sm text-gray-500 mb-4">Providing these now helps us process your payments faster, but you can also add them later.</p>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <label htmlFor="bankName" className="block text-sm font-medium text-gray-700 mb-2">
+                  Bank Name
+                </label>
+                <input
+                  id="bankName"
+                  name="bankName"
+                  type="text"
+                  value={formData.bankName}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                  placeholder="e.g., Standard Chartered"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="accountName" className="block text-sm font-medium text-gray-700 mb-2">
+                  Account Name
+                </label>
+                <input
+                  id="accountName"
+                  name="accountName"
+                  type="text"
+                  value={formData.accountName}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                  placeholder="Name on account"
+                />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6 mt-6">
+              <div>
+                <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                  Account Number
+                </label>
+                <input
+                  id="accountNumber"
+                  name="accountNumber"
+                  type="text"
+                  value={formData.accountNumber}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                  placeholder="Account number"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="bankCode" className="block text-sm font-medium text-gray-700 mb-2">
+                  Bank/Sort Code
+                </label>
+                <input
+                  id="bankCode"
+                  name="bankCode"
+                  type="text"
+                  value={formData.bankCode}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                  placeholder="IFSC/Swift/Sort Code"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <label htmlFor="paymentNotes" className="block text-sm font-medium text-gray-700 mb-2">
+                Additional Payment Info (e.g., Mobile Money)
+              </label>
+              <input
+                id="paymentNotes"
+                name="paymentNotes"
+                type="text"
+                value={formData.paymentNotes}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                placeholder="Any special payment instructions"
+              />
             </div>
           </div>
 
