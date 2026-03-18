@@ -80,13 +80,15 @@ export default function VendorVouchersPage() {
           let schoolName = null
           let voucherAmount = null
 
-          // Get vendor name
+          // Get vendor name and payment details
           if (item.vendor_id) {
+            // First try active vendor profiles
             const { data: vendorData } = await supabase
               .from("vendor_profiles")
               .select("vendor_name, bank_name, account_name, account_number, bank_code, payment_notes")
               .eq("id", item.vendor_id)
-              .single()
+              .maybeSingle()
+
             if (vendorData) {
               vendorName = vendorData.vendor_name
               item.bank_name = vendorData.bank_name
@@ -94,6 +96,24 @@ export default function VendorVouchersPage() {
               item.account_number = vendorData.account_number
               item.bank_code = vendorData.bank_code
               item.payment_notes = vendorData.payment_notes
+            } else {
+              // Fallback to vendor signups if profile not found or inaccessible
+              const { data: signupData } = await supabase
+                .from("vendor_signups")
+                .select("vendor_name, bank_name, account_name, account_number, bank_code, payment_notes")
+                .eq("user_id", item.vendor_id)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+              if (signupData) {
+                vendorName = signupData.vendor_name
+                item.bank_name = signupData.bank_name
+                item.account_name = signupData.account_name
+                item.account_number = signupData.account_number
+                item.bank_code = signupData.bank_code
+                item.payment_notes = signupData.payment_notes
+              }
             }
           }
 
