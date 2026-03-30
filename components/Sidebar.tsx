@@ -9,21 +9,28 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState<string | null>(null);
+  // "loading" = still fetching, then the actual role string, or "unknown" if fetch failed
+  const [userRole, setUserRole] = useState<string>("loading");
 
   useEffect(() => {
     checkUserRole();
   }, []);
 
   const checkUserRole = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      setUserRole(profile?.role || null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        setUserRole(profile?.role || "unknown");
+      } else {
+        setUserRole("unknown");
+      }
+    } catch {
+      setUserRole("unknown");
     }
   };
 
@@ -96,11 +103,13 @@ export default function Sidebar() {
     },
   ];
 
-  // Default to admin navigation items while role is loading to prevent flash
+  // Only return nav items for the user's actual role — never default to admin
   const getNavigationItems = () => {
-    if (userRole === "admin" || userRole === null) return adminNavigationItems;
+    if (userRole === "loading") return null; // Still loading, show skeleton
+    if (userRole === "admin") return adminNavigationItems;
     if (userRole === "vendor") return vendorNavigationItems;
-    return schoolNavigationItems;
+    if (userRole === "school") return schoolNavigationItems;
+    return schoolNavigationItems; // Default non-admin users to school nav
   };
 
   const navigationItems = getNavigationItems();
@@ -115,6 +124,13 @@ export default function Sidebar() {
   const handleNavigation = (path: string) => {
     router.push(path);
     setIsOpen(false); // Close mobile menu after navigation
+  };
+
+  const getPortalTitle = () => {
+    if (userRole === "loading") return "Loading...";
+    if (userRole === "admin") return "Admin Dashboard";
+    if (userRole === "vendor") return "Vendor Portal";
+    return "School Portal";
   };
 
   return (
@@ -136,34 +152,42 @@ export default function Sidebar() {
           {/* Logo */}
           <div className="p-6 border-b border-gray-200">
             <h1 className="text-2xl font-bold text-gray-900">
-              {userRole === null || userRole === "admin"
-                ? "Admin Dashboard"
-                : userRole === "vendor"
-                  ? "Vendor Portal"
-                  : "School Portal"}
+              {getPortalTitle()}
             </h1>
             <p className="text-xs text-gray-500 mt-1">Global Bright Futures</p>
           </div>
 
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-2">
-            {navigationItems.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.path);
-              return (
-                <button
-                  key={item.path}
-                  onClick={() => handleNavigation(item.path)}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors w-full text-left ${active
-                    ? "bg-blue-50 text-blue-700 font-semibold"
-                    : "text-gray-700 hover:bg-gray-100"
-                    }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </button>
-              );
-            })}
+            {navigationItems === null ? (
+              /* Loading skeleton for nav items */
+              <>
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center space-x-3 px-4 py-3">
+                    <div className="w-5 h-5 bg-gray-200 rounded animate-pulse" />
+                    <div className="h-4 bg-gray-200 rounded w-28 animate-pulse" />
+                  </div>
+                ))}
+              </>
+            ) : (
+              navigationItems.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.path);
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => handleNavigation(item.path)}
+                    className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors w-full text-left ${active
+                      ? "bg-blue-50 text-blue-700 font-semibold"
+                      : "text-gray-700 hover:bg-gray-100"
+                      }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="font-medium">{item.label}</span>
+                  </button>
+                );
+              })
+            )}
           </nav>
 
           {/* Logout */}
